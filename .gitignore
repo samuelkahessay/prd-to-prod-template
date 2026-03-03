@@ -1,0 +1,29 @@
+.DS_Store
+*.swp
+*.swo
+*~
+*.log
+.env
+.env.*
+.claude/
+node_modules/
+dist/
+.next/
+.github/aw/
+.vscode/
+.vercel/
+aw-prompts/
+aw_info.json
+mcp-logs/
+*.patch
+.vercel
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+.azure/
+
+# Drill reports (generated, not committed)
+drills/reports/*.json
