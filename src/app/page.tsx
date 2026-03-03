@@ -1,11 +1,27 @@
+import Nav from '@/components/Nav'
+import Hero from '@/components/Hero'
+import Pipeline from '@/components/Pipeline'
+import HowItWorks from '@/components/HowItWorks'
+import MetaSection from '@/components/MetaSection'
+import StatsBar from '@/components/StatsBar'
+import GetStarted from '@/components/GetStarted'
+import Footer from '@/components/Footer'
+import MagneticCursor from '@/components/MagneticCursor'
+
 export default function Home() {
   return (
-    <main>
-      <section style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <h1 style={{ fontFamily: 'var(--font-serif), Georgia, serif', fontWeight: 400, fontSize: 'clamp(2.5rem, 7vw, 5rem)', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-          From requirement<br />to production.
-        </h1>
-      </section>
-    </main>
+    <>
+      <MagneticCursor />
+      <Nav />
+      <main>
+        <Hero />
+        <Pipeline />
+        <HowItWorks />
+        <MetaSection />
+        <StatsBar />
+        <GetStarted />
+        <Footer />
+      </main>
+    </>
   )
 }
