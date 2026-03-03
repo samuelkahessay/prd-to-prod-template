@@ -3,7 +3,7 @@
 # appropriate deployment workflow on every push to main.
 #
 # The .deploy-profile file in the repo root contains the profile name
-# (currently "nextjs-vercel"; add more profiles and jobs as needed).
+# (e.g., "nextjs-vercel", "docker-generic", "dotnet-azure").
 #
 # Safety:
 #   - Concurrency group ensures only one deploy runs at a time
@@ -53,3 +53,27 @@ jobs:
     if: needs.detect-profile.outputs.profile == 'nextjs-vercel'
     uses: ./.github/workflows/deploy-vercel.yml
     secrets: inherit
+
+  # ─── Extensibility: Add new deployment targets below ───
+  #
+  # To add a new deployment target:
+  #   1. Create a deploy profile: .github/deploy-profiles/<profile-name>.yml
+  #   2. Create a deployment workflow: .github/workflows/deploy-<name>.yml
+  #   3. Add a job below following the same pattern as deploy-vercel
+  #   4. Set .deploy-profile to your profile name
+  #
+  # Example: Docker (generic) — see .github/deploy-profiles/docker-generic.yml
+  #
+  # deploy-docker:
+  #   needs: detect-profile
+  #   if: needs.detect-profile.outputs.profile == 'docker-generic'
+  #   uses: ./.github/workflows/deploy-docker.yml
+  #   secrets: inherit
+  #
+  # Example: .NET + Azure — see .github/deploy-profiles/dotnet-azure.yml
+  #
+  # deploy-azure:
+  #   needs: detect-profile
+  #   if: needs.detect-profile.outputs.profile == 'dotnet-azure'
+  #   uses: ./.github/workflows/deploy-azure.yml
+  #   secrets: inherit

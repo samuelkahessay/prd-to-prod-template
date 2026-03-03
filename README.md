@@ -39,6 +39,13 @@ Click **"Use this template"** → **"Create a new repository"**.
 
 Clone your new repo locally.
 
+> **Important: First-Time Setup** — Agentic workflows (the `.md` files in
+> `.github/workflows/`) require compiled `.lock.yml` files to function as
+> GitHub Actions. Running `setup.sh` (Step 2 below) handles this automatically
+> by calling `scripts/bootstrap.sh`, which runs `gh aw compile`. If you push
+> code before running setup, workflows will not trigger. To fix this after the
+> fact, run `scripts/bootstrap.sh` or `gh aw compile` manually.
+
 ### 2. Run setup
 
 ```bash
@@ -140,6 +147,25 @@ with Contents, Issues, Pull requests, Actions, and Workflows permissions.
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `PIPELINE_HEALING_ENABLED` | No | Set to `false` to pause autonomous healing |
+
+## Troubleshooting
+
+### Workflows not triggering?
+
+Agentic workflows need compiled `.lock.yml` files to function. Run
+`scripts/bootstrap.sh` or `gh aw compile` to generate them.
+
+### Deploy failing?
+
+Verify your deployment secrets are configured in repo **Settings → Secrets and
+variables → Actions**. For Vercel: `VERCEL_TOKEN`, `VERCEL_ORG_ID`,
+`VERCEL_PROJECT_ID`.
+
+### CI failing on empty repo?
+
+The pipeline expects application code. Submit your first PRD to generate app
+code via the `prd-decomposer` and `repo-assist` workflows, or add a minimal
+app manually.
 
 ## License
 

@@ -336,10 +336,13 @@ else
 fi
 
 ###############################################################################
-# Step 6: Vercel Secrets
+# Step 6: Vercel Secrets (optional — skip if using a different deploy target)
 ###############################################################################
 header "Step 6: Vercel Deployment Secrets"
 
+echo "Vercel is the default deployment target (nextjs-vercel profile)."
+echo "Skip this step if you plan to use a different deployment provider."
+echo ""
 echo "For Vercel deployment, the pipeline needs three secrets:"
 echo "  - VERCEL_TOKEN       — your Vercel API token"
 echo "  - VERCEL_ORG_ID      — your Vercel organization ID"
@@ -347,13 +350,19 @@ echo "  - VERCEL_PROJECT_ID  — your Vercel project ID"
 echo ""
 
 if [[ "$NON_INTERACTIVE" == true ]]; then
-  warn "Non-interactive mode: set Vercel secrets manually:"
+  info "Non-interactive mode: Vercel secrets are optional."
+  info "If using Vercel, set secrets manually:"
   echo "  gh secret set VERCEL_TOKEN"
   echo "  gh secret set VERCEL_ORG_ID"
   echo "  gh secret set VERCEL_PROJECT_ID"
 else
-  prompt SETUP_VERCEL_NOW "Set Vercel secrets now? (y/n)" "y"
-  if [[ "$SETUP_VERCEL_NOW" =~ ^[Yy] ]]; then
+  prompt SKIP_VERCEL "Skip Vercel setup? (y/N)" "n"
+  if [[ "$SKIP_VERCEL" =~ ^[Yy] ]]; then
+    info "Skipping Vercel setup. You can configure deployment secrets later:"
+    echo "  gh secret set VERCEL_TOKEN"
+    echo "  gh secret set VERCEL_ORG_ID"
+    echo "  gh secret set VERCEL_PROJECT_ID"
+  else
     prompt_secret VERCEL_TOKEN_VALUE "VERCEL_TOKEN (input hidden)"
     if [[ -n "$VERCEL_TOKEN_VALUE" ]]; then
       echo "$VERCEL_TOKEN_VALUE" | gh secret set VERCEL_TOKEN
@@ -377,11 +386,6 @@ else
     else
       warn "Empty value — skipping VERCEL_PROJECT_ID"
     fi
-  else
-    warn "Skipped. Set them later with:"
-    echo "  gh secret set VERCEL_TOKEN"
-    echo "  gh secret set VERCEL_ORG_ID"
-    echo "  gh secret set VERCEL_PROJECT_ID"
   fi
 fi
 
