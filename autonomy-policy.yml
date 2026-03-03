@@ -61,9 +61,6 @@ actions:
       - drills/decisions/**
       - scripts/log-decision.sh
       - scripts/demo-preflight.sh
-      # Replace with your operator-facing pages/endpoints:
-      # - src/pages/operator/**
-      # - src/api/autonomy/**
     evidence_required:
       - Existing workflow events or drill outputs to render
       - No authority expansion in the underlying workflows

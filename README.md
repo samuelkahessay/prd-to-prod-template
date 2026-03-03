@@ -39,38 +39,36 @@ Click **"Use this template"** → **"Create a new repository"**.
 
 Clone your new repo locally.
 
-### 2. Run bootstrap
+### 2. Run setup
 
 ```bash
-./scripts/bootstrap.sh
+./setup.sh
 ```
 
-This creates labels, compiles gh-aw workflows, seeds the repo-memory branch,
-and configures repo settings.
+The wizard will:
+- Ask for your app source directory (default: `src`)
+- Configure `autonomy-policy.yml` with your paths
+- Set up your PAT and Vercel deployment secrets
+- Run bootstrap (labels, workflow compilation, repo settings)
+- Configure the AI engine
 
-### 3. Configure secrets
+For CI/automation:
+```bash
+./setup.sh --non-interactive --app-dir src
+```
+
+### 3. Configure branch protection
+
+In **Settings → Rules → Rulesets**, create a rule for `main`:
+- Require 1 approving review
+- Require the `review` status check
+- Allow squash merges only
+
+### 4. Verify setup
 
 ```bash
-# Configure the AI engine (GitHub Copilot, Claude, or Codex)
-gh aw secrets bootstrap
-
-# Required for self-healing loop and auto-merge:
-# Create a PAT with repo and workflow scopes, then:
-gh secret set GH_AW_GITHUB_TOKEN
-
-# For Vercel deployment:
-gh secret set VERCEL_TOKEN
-gh secret set VERCEL_ORG_ID
-gh secret set VERCEL_PROJECT_ID
+./setup-verify.sh
 ```
-
-### 4. Configure repo settings
-
-- Enable **Settings → General → Allow auto-merge**
-- Create a **branch protection rule** for `main`:
-  - Require 1 approving review
-  - Require the `review` status check
-  - Allow squash merges only
 
 ### 5. Submit your first PRD
 
@@ -91,8 +89,9 @@ See [docs/why-gh-aw.md](docs/why-gh-aw.md) for why this uses GitHub Agentic Work
 
 ### autonomy-policy.yml
 
-Defines what the AI agents can and cannot do. Edit `allowed_targets` in
-each action block to match your application's directory structure.
+Defines what the AI agents can and cannot do. The setup wizard configures
+`allowed_targets` for your app directory. Edit this file to add or restrict
+paths as your project grows.
 
 ## Self-Healing Loop
 
