@@ -21,23 +21,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Read deploy profile
-        id: profile
-        run: |
-          PROFILE=$(cat .deploy-profile 2>/dev/null || echo "nextjs-vercel")
-          echo "profile=${PROFILE}" >> $GITHUB_OUTPUT
-
       - name: Setup Node.js
-        if: steps.profile.outputs.profile == 'nextjs-vercel'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Setup .NET SDK
-        if: steps.profile.outputs.profile == 'dotnet-azure'
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
 
       - name: Install gh-aw extension
         uses: github/gh-aw/actions/setup-cli@v0.50.1

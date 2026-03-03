@@ -79,13 +79,9 @@ These workflows handle CI, deploy, repair routing, and stall recovery.
 
 | Workflow | Role |
 |---|---|
-| `ci-node.yml` | Build and test for Node profiles |
-| `dotnet-ci.yml` | Build and test for .NET profiles |
-| `ci-docker.yml` | Build and test for Docker profiles |
+| `ci-node.yml` | Build and test for Node/Next.js |
 | `deploy-router.yml` | Chooses the deploy workflow based on `.deploy-profile` |
 | `deploy-vercel.yml` | Deploys Next.js apps to Vercel |
-| `deploy-azure.yml` | Deploys apps to Azure |
-| `deploy-docker.yml` | Publishes Docker images to GHCR |
 | `ci-failure-issue.yml` | Converts failed CI or deploy runs into repair commands or escalation issues |
 | `ci-failure-resolve.yml` | Marks active repair incidents resolved when CI recovers |
 | `pipeline-watchdog.yml` | Detects stalled PRs, orphaned issues, and stale repair loops |
@@ -214,7 +210,6 @@ needs to know what the system is doing, what it refused to do, and why.
 | `VERCEL_TOKEN` | Vercel deployment token (Vercel profile) |
 | `VERCEL_ORG_ID` | Vercel organization ID (Vercel profile) |
 | `VERCEL_PROJECT_ID` | Vercel project ID (Vercel profile) |
-| `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` | Azure deploy identity (Azure profile) |
 
 ## Repo Settings
 

@@ -24,7 +24,7 @@ safe-outputs:
 
 network:
   allowed:
-    - dotnet
+    - node
 
 tools:
   github:
@@ -215,9 +215,6 @@ npm test
 
 # For Python projects
 pytest
-
-# For .NET projects
-dotnet test
 ```
 
 If tests fail:
@@ -239,9 +236,6 @@ npm run lint
 
 # For Python projects
 flake8 . || pylint .
-
-# For .NET projects
-dotnet format --verify-no-changes
 ```
 
 Fix any linting issues introduced by the simplifications.
@@ -260,9 +254,6 @@ npm run build
 # For Python projects
 # (typically no build step, but check imports)
 python -m py_compile changed_files.py
-
-# For .NET projects
-dotnet build
 ```
 
 ## Phase 4: Create Pull Request

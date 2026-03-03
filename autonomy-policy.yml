@@ -30,16 +30,10 @@ actions:
     default_mode: autonomous
     requires_human_reason: null
     allowed_targets:
-      # Replace with your application directories:
       - src/**
       - tests/**
       - package.json
       - Dockerfile
-      # Dotnet example (uncomment if using dotnet-azure profile):
-      # - YourApp/**
-      # - YourApp.Tests/**
-      # - YourApp.sln
-      # - global.json
     evidence_required:
       - Linked issue with acceptance criteria
       - Tests or verification commands for the change
@@ -93,14 +87,9 @@ actions:
       Changes to authentication, compliance, or payment logic carry elevated risk
       and require human review before merge.
     allowed_targets:
-      # Replace with your security-sensitive paths:
       - src/**/auth/**
       - src/**/compliance/**
       - src/**/payments/**
-      # Dotnet example (uncomment if using dotnet-azure profile):
-      # - YourApp/**/Auth/**
-      # - YourApp/**/Compliance/**
-      # - YourApp/**/Payments/**
     evidence_required:
       - Human-approved sensitive change
       - Security or compliance impact assessment
@@ -147,10 +136,9 @@ actions:
     allowed_targets:
       - GitHub Actions secrets
       - GitHub Actions variables
-      - Azure credentials
       - COPILOT_GITHUB_TOKEN
       - GH_AW_GITHUB_TOKEN
-      - GH_AW_PROJECT_GITHUB_TOKEN
+      - VERCEL_TOKEN
       - PIPELINE_HEALING_ENABLED
     evidence_required:
       - Human-approved secret or variable change
@@ -163,9 +151,7 @@ actions:
     requires_human_reason: Deployment policy changes can affect live systems and widen operational blast radius.
     allowed_targets:
       - .deploy-profile
-      - Azure App Service configuration
       - Vercel configuration
-      - Docker deployment workflow inputs
     evidence_required:
       - Human-approved deployment change
       - Environment impact assessment

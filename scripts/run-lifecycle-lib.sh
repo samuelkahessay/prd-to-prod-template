@@ -22,9 +22,6 @@ RUN_LIFECYCLE_EPHEMERAL_FILES=(
   "vercel.json"
   "next-env.d.ts"
   "Dockerfile"
-  # Dotnet example (uncomment if using dotnet-azure profile):
-  # "YourApp.sln"
-  # "global.json"
 )
 
 run_lifecycle_existing_app_paths() {

@@ -81,18 +81,6 @@ Or drop a PRD file into `docs/prd/` and run:
 gh aw run prd-decomposer
 ```
 
-## Choosing a Stack
-
-Edit `.deploy-profile` to switch stacks:
-
-| Profile | File content | CI Workflow | Deploy Target |
-|---------|-------------|-------------|---------------|
-| **Next.js + Vercel** | `nextjs-vercel` | Node CI | Vercel |
-| .NET + Azure | `dotnet-azure` | .NET CI | Azure App Service |
-| Docker + GHCR | `docker-generic` | Docker CI | GitHub Container Registry |
-
-After changing the profile, run `./scripts/bootstrap.sh` to recompile workflows.
-
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design.
@@ -105,11 +93,6 @@ See [docs/why-gh-aw.md](docs/why-gh-aw.md) for why this uses GitHub Agentic Work
 
 Defines what the AI agents can and cannot do. Edit `allowed_targets` in
 each action block to match your application's directory structure.
-
-### .github/deploy-profiles/
-
-Each profile defines the build runtime, commands, and deploy workflow for a
-tech stack. You can create custom profiles by adding new YAML files here.
 
 ## Self-Healing Loop
 
@@ -127,20 +110,15 @@ This loop is autonomous — zero human intervention required.
 | Secret | Required | Purpose |
 |--------|----------|---------|
 | `GH_AW_GITHUB_TOKEN` | Yes | PAT for auto-merge and workflow dispatch (bypasses GitHub anti-cascade) |
-| `VERCEL_TOKEN` | Vercel only | Vercel deployment token |
-| `VERCEL_ORG_ID` | Vercel only | Vercel organization ID |
-| `VERCEL_PROJECT_ID` | Vercel only | Vercel project ID |
-| `AZURE_CLIENT_ID` | Azure only | Azure service principal client ID |
-| `AZURE_TENANT_ID` | Azure only | Azure tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | Azure only | Azure subscription ID |
+| `VERCEL_TOKEN` | Yes | Vercel deployment token |
+| `VERCEL_ORG_ID` | Yes | Vercel organization ID |
+| `VERCEL_PROJECT_ID` | Yes | Vercel project ID |
 
 ## Variables Reference
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `PIPELINE_HEALING_ENABLED` | No | Set to `false` to pause autonomous healing |
-| `AZURE_WEBAPP_NAME` | Azure only | Azure Web App name |
-| `AZURE_RESOURCE_GROUP` | Azure only | Azure resource group name |
 
 ## License
 

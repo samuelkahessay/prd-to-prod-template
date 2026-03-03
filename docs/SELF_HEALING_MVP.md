@@ -2,14 +2,9 @@
 
 ## What This Runbook Covers
 
-This document covers the bounded self-healing sub-loop inside `prd-to-prod`.
-It does not describe the entire system. It documents the repair path for the
-current `.NET + Azure App Service` lane and the controls around it.
-
-Week-one MVP support is currently validated only for the `dotnet-azure` profile
-in [`.deploy-profile`](../.deploy-profile). The repository still contains
-profile-aware CI and deploy routing for Node and Docker, but the reproducible
-MVP claim in this runbook applies only to the current `.NET + Azure` path.
+This document covers the bounded self-healing sub-loop inside the pipeline.
+It does not describe the entire system. It documents the repair path for
+CI failures and the controls around it.
 
 ## Autonomy Boundary
 
@@ -90,7 +85,7 @@ bash scripts/verify-mvp.sh --skip-audit
 That command runs shell decision-logic tests plus:
 
 ```bash
-npm test  # or: dotnet test YourApp.sln
+npm test
 ```
 
 ## Audit Drill Command
@@ -141,7 +136,6 @@ because they are not auto-merged by default.
 
 - There is no rollback automation.
 - There is no external paging, Slack, or incident-management integration.
-- Week-one MVP support is not claimed for profiles other than `dotnet-azure`.
 - Watchdog and requeue behavior are mostly redispatch logic, not root-cause
   diagnosis.
 - `repo-assist` remains single-slot throughput.
@@ -242,7 +236,7 @@ Interpretation:
 
 Symptoms:
 
-- `npm test  # or: dotnet test YourApp.sln` passes locally
+- `npm test` passes locally
 - `bash scripts/self-healing-drill.sh audit <sha>` fails
 
 Typical causes:

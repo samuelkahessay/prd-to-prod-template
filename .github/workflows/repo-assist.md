@@ -29,7 +29,6 @@ network:
   - defaults
   - node
   - python
-  - dotnet
 
 safe-outputs:
   create-pull-request:

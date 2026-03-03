@@ -252,7 +252,7 @@ while IFS= read -r PR_ROW; do
     upsert_comment "$PR_NUM" "$STATE_COMMENT_ID" "$ESCALATED_STATE"
     remove_pr_label "$PR_NUM" "repair-in-progress"
     add_pr_label "$PR_NUM" "repair-escalated"
-    TITLE="[CI Incident] Escalation: PR #${PR_NUM} repeated .NET CI failure"
+    TITLE="[CI Incident] Escalation: PR #${PR_NUM} repeated CI failure"
     BODY=$(render_incident_body "$PR_NUM" "$PR_URL" "$CURRENT_HEAD_BRANCH" "$CURRENT_HEAD_SHA" "$LINKED_ISSUE" "${FAILURE_TYPE:-unknown}" "${FAILURE_SIGNATURE:-unknown-failure}" "$FAILURE_SUMMARY" "$FAILURE_EXCERPT" "The automated repair loop exhausted its retry budget or remained unresolved for more than two hours.")
     create_or_update_incident_issue "$TITLE" "$BODY"
     ACTIONS_TAKEN=$((ACTIONS_TAKEN + 1))
@@ -265,7 +265,7 @@ while IFS= read -r PR_ROW; do
     upsert_comment "$PR_NUM" "$STATE_COMMENT_ID" "$ESCALATED_STATE"
     remove_pr_label "$PR_NUM" "repair-in-progress"
     add_pr_label "$PR_NUM" "repair-escalated"
-    TITLE="[CI Incident] Escalation: PR #${PR_NUM} repeated .NET CI failure"
+    TITLE="[CI Incident] Escalation: PR #${PR_NUM} repeated CI failure"
     BODY=$(render_incident_body "$PR_NUM" "$PR_URL" "$CURRENT_HEAD_BRANCH" "$CURRENT_HEAD_SHA" "$LINKED_ISSUE" "${FAILURE_TYPE:-unknown}" "${FAILURE_SIGNATURE:-unknown-failure}" "$FAILURE_SUMMARY" "$FAILURE_EXCERPT" "GH_AW_GITHUB_TOKEN is unavailable, so the watchdog cannot repost the repair command.")
     create_or_update_incident_issue "$TITLE" "$BODY"
     ACTIONS_TAKEN=$((ACTIONS_TAKEN + 1))
@@ -292,7 +292,7 @@ while IFS= read -r PR_ROW; do
     upsert_comment "$PR_NUM" "$STATE_COMMENT_ID" "$ESCALATED_STATE"
     remove_pr_label "$PR_NUM" "repair-in-progress"
     add_pr_label "$PR_NUM" "repair-escalated"
-    TITLE="[CI Incident] Escalation: PR #${PR_NUM} repeated .NET CI failure"
+    TITLE="[CI Incident] Escalation: PR #${PR_NUM} repeated CI failure"
     BODY=$(render_incident_body "$PR_NUM" "$PR_URL" "$CURRENT_HEAD_BRANCH" "$CURRENT_HEAD_SHA" "$LINKED_ISSUE" "${FAILURE_TYPE:-unknown}" "${FAILURE_SIGNATURE:-unknown-failure}" "$FAILURE_SUMMARY" "$FAILURE_EXCERPT" "The watchdog could not repost the repair command after the incident went stale.")
     create_or_update_incident_issue "$TITLE" "$BODY"
     ACTIONS_TAKEN=$((ACTIONS_TAKEN + 1))

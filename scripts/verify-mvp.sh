@@ -48,7 +48,7 @@ CHECKS=(
   "bash scripts/tests/test-run-lifecycle-lib.sh"
   "bash scripts/tests/test-self-healing-drill-dispatch-substate.sh"
   "bash scripts/tests/test-self-healing-drill-workflow-matching.sh"
-  "# dotnet test YourApp.sln  # uncomment for dotnet projects"
+  "npm test"
 )
 
 run_check() {

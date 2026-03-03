@@ -129,11 +129,7 @@ Before creating issues, determine the target tech stack and deploy profile:
 
 1. **Check the PRD for explicit stack preference.** Look for mentions of specific frameworks (Next.js, React, .NET, Express), languages (TypeScript, C#, Python), or deployment targets (Vercel, Azure, Docker).
 
-2. **If no explicit preference**, infer from the requirements:
-   - Web dashboard, landing page, interactive UI, visualization → `nextjs-vercel`
-   - API service, enterprise backend, .NET/C# → `dotnet-azure`
-   - Multi-language, microservices, or unclear → `docker-generic`
-   - Default (no clear signals): `nextjs-vercel`
+2. **If no explicit preference**, use the `nextjs-vercel` profile (the default for this template).
 
 3. **Read the selected deploy profile** from `.github/deploy-profiles/{profile-name}.yml` to understand the build, test, and deploy configuration.
 
