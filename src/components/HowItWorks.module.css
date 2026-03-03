@@ -1,0 +1,47 @@
+.section {
+  padding: 6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4rem;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.number {
+  font-family: monospace;
+  font-size: 3rem;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.stepTitle {
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 500;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.75rem;
+}
+
+.description {
+  color: var(--text-secondary);
+  max-width: 500px;
+}
+
+@media (max-width: 768px) {
+  .number {
+    font-size: 2rem;
+  }
+
+  .step {
+    gap: 1rem;
+  }
+}
