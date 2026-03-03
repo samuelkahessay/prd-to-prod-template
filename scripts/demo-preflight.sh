@@ -88,11 +88,13 @@ run_check "MVP: verify-mvp.sh passes" \
 
 # 6. Live checks (optional)
 if [ "$SKIP_LIVE" = false ]; then
+  REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "OWNER/REPO")}"
   run_check "Live: CI is green on main" \
-    bash -c 'gh run list --repo samuelkahessay/prd-to-prod --branch main --status success --limit 1 --json conclusion | grep -q "success"'
+    bash -c "gh run list --repo $REPO --branch main --status success --limit 1 --json conclusion | grep -q success"
 
-  run_check "Live: deployment health check" \
-    bash -c 'curl -fsS --max-time 10 https://prd-to-prod.azurewebsites.net/health >/dev/null 2>&1'
+  # Customize this URL to your deployment endpoint:
+  # run_check "Live: deployment health check" \
+  #   bash -c 'curl -fsS --max-time 10 https://YOUR_APP.example.com/health >/dev/null 2>&1'
 fi
 
 # Summary

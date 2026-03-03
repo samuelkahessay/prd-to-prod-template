@@ -90,7 +90,7 @@ bash scripts/verify-mvp.sh --skip-audit
 That command runs shell decision-logic tests plus:
 
 ```bash
-dotnet test TicketDeflection.sln
+npm test  # or: dotnet test YourApp.sln
 ```
 
 ## Audit Drill Command
@@ -242,7 +242,7 @@ Interpretation:
 
 Symptoms:
 
-- `dotnet test TicketDeflection.sln` passes locally
+- `npm test  # or: dotnet test YourApp.sln` passes locally
 - `bash scripts/self-healing-drill.sh audit <sha>` fails
 
 Typical causes:

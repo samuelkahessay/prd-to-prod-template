@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-REPO="samuelkahessay/prd-to-prod"
+REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "OWNER/REPO")}"
 INTERVAL="${1:-180}"  # default 3 minutes
 PREV_STATE=""
 CYCLE=0

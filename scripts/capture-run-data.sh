@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-REPO="samuelkahessay/prd-to-prod"
+REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "OWNER/REPO")}"
 
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <run-number>"
