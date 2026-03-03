@@ -1,0 +1,21 @@
+# Deploy Profile: Docker (Generic Container) — Phase 6 (coming soon)
+# Read by prd-decomposer and repo-assist to configure CI/CD for this stack.
+stack: docker
+name: "Docker + Container Registry"
+
+detect:
+  files: ["Dockerfile"]
+
+build:
+  runtime: docker
+  build: "docker build -t ${image_name}:${tag} ."
+  test: "docker run --rm ${image_name}:${tag} test"
+
+deploy:
+  workflow: deploy-docker.yml  # TODO: Create deploy-docker.yml workflow
+  method: "GitHub Container Registry (ghcr.io)"
+  secrets: []  # TODO: Add secrets if needed (e.g., GHCR credentials)
+
+ci:
+  workflow: ci-docker.yml  # TODO: Create ci-docker.yml workflow
+  name: "Docker CI"

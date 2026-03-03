@@ -89,10 +89,11 @@ header "Config Files"
 DEPLOY_PROFILE="$REPO_ROOT/.deploy-profile"
 if [[ -f "$DEPLOY_PROFILE" ]]; then
   PROFILE_VALUE=$(cat "$DEPLOY_PROFILE" | tr -d '[:space:]')
-  if [[ "$PROFILE_VALUE" == "nextjs-vercel" ]]; then
-    pass ".deploy-profile exists and equals 'nextjs-vercel'"
+  PROFILE_YAML="$REPO_ROOT/.github/deploy-profiles/${PROFILE_VALUE}.yml"
+  if [[ -f "$PROFILE_YAML" ]]; then
+    pass ".deploy-profile exists (active profile: '$PROFILE_VALUE')"
   else
-    fail ".deploy-profile exists but value is '$PROFILE_VALUE' (expected 'nextjs-vercel')"
+    fail ".deploy-profile value is '$PROFILE_VALUE' but .github/deploy-profiles/${PROFILE_VALUE}.yml not found"
   fi
 else
   fail ".deploy-profile not found"
@@ -189,14 +190,18 @@ if [[ "$GH_AUTH_OK" == true ]]; then
     fail "Pipeline auth: need GitHub App (PIPELINE_APP_ID + PIPELINE_APP_PRIVATE_KEY) or PAT (GH_AW_GITHUB_TOKEN)"
   fi
 
-  # Check Vercel secrets
-  for secret in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
-    if echo "$SECRET_LIST" | grep -qx "$secret" 2>/dev/null; then
-      pass "Secret '$secret' is set"
-    else
-      fail "Secret '$secret' not found (run: gh secret set $secret)"
-    fi
-  done
+  # Check Vercel secrets (only if the active profile declares them)
+  if [[ -f "${PROFILE_YAML:-}" ]] && grep -q "VERCEL_TOKEN" "$PROFILE_YAML"; then
+    for secret in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+      if echo "$SECRET_LIST" | grep -qx "$secret" 2>/dev/null; then
+        pass "Secret '$secret' is set"
+      else
+        fail "Secret '$secret' not found (run: gh secret set $secret)"
+      fi
+    done
+  else
+    skip "Deploy secrets check skipped — configure for your active profile: ${PROFILE_VALUE}"
+  fi
 else
   skip "Pipeline auth check (gh auth required)"
   for secret in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do

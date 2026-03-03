@@ -125,23 +125,53 @@ jobs:
             printf '%s' "$comments_json" | jq -c --arg marker "$marker" '[.[] | select(.body | contains($marker))] | last // {}'
           }
 
-          upsert_comment() {
-            local token=$1
-            local item_number=$2
-            local comment_id=$3
-            local body=$4
-            local payload
-            payload=$(mktemp)
-            jq -n --arg body "$body" '{body: $body}' > "$payload"
-            if [ -n "$comment_id" ]; then
-              GH_TOKEN="$token" gh api --method PATCH "/repos/${REPO}/issues/comments/${comment_id}" --input "$payload" >/dev/null
-            else
-              GH_TOKEN="$token" gh api --method POST "/repos/${REPO}/issues/${item_number}/comments" --input "$payload" >/dev/null
-            fi
-            rm -f "$payload"
-          }
+           upsert_comment() {
+             local token=$1
+             local item_number=$2
+             local comment_id=$3
+             local body=$4
+             local payload
+             payload=$(mktemp)
+             jq -n --arg body "$body" '{body: $body}' > "$payload"
+             if [ -n "$comment_id" ]; then
+               GH_TOKEN="$token" gh api --method PATCH "/repos/${REPO}/issues/comments/${comment_id}" --input "$payload" >/dev/null
+             else
+               GH_TOKEN="$token" gh api --method POST "/repos/${REPO}/issues/${item_number}/comments" --input "$payload" >/dev/null
+             fi
+             rm -f "$payload"
+           }
 
-          render_state_body() {
+           extract_drill_id() {
+             local commit_message drill_id
+             commit_message=$(gh api "/repos/${REPO}/commits/${HEAD_SHA}" --jq '.commit.message' 2>/dev/null || echo "")
+             drill_id=$(printf '%s\n' "$commit_message" | sed -n 's/.*\[drill-id:\([^]]*\)\].*/\1/p' | head -1)
+             if [ -n "$drill_id" ]; then
+               printf '%s' "$drill_id"
+               return 0
+             fi
+             # Customize this path to your drill canary file, or remove this fallback if your project doesn't use drill metadata
+             git log --format=%B -- <drill-canary-file-pattern> 2>/dev/null \
+               | sed -n 's/.*\[drill-id:\([^]]*\)\].*/\1/p' | head -1
+           }
+
+           append_drill_metadata() {
+             local body=$1
+             local drill_id=$2
+             if [ -z "$drill_id" ]; then
+               printf '%s' "$body"
+               return 0
+             fi
+             printf '%s\n\n%s\n%s\n%s\n%s\n%s\n' \
+               "$body" \
+               "<!-- self-healing-drill:v1" \
+               "drill_id=${drill_id}" \
+               "observed_commit=${HEAD_SHA}" \
+               "observed_failure_run_id=${RUN_ID}" \
+               "observed_failure_run_url=${RUN_URL}" \
+               "-->"
+           }
+
+           render_state_body() {
             local status=$1
             local linked_issue=$2
             local attempt_count=$3
@@ -274,26 +304,28 @@ jobs:
               exit 0
             fi
 
-            TITLE="[Pipeline] CI Build Failure on main: ${SHORT_SUMMARY}"
-            BODY=$(printf '%s\n' \
-              "## CI Build Failure on \`main\`" \
-              "" \
-              "- **Run**: ${RUN_URL}" \
-              "- **Branch**: \`${HEAD_BRANCH}\`" \
-              "- **Commit**: \`${HEAD_SHA}\`" \
-              "- **Failure Type**: ${FAILURE_TYPE}" \
-              "- **Failure Signature**: \`${FAILURE_SIGNATURE}\`" \
-              "" \
-              "### Failure Summary" \
-              "${FAILURE_SUMMARY}" \
-              "" \
-              "### Failed-Step Excerpt" \
-              '```text' \
-              "${FAILURE_EXCERPT}" \
-              '```' \
-              "" \
-              "> This issue was created automatically by the CI Failure Router workflow.")
-            ISSUE_ARGS=()
+             TITLE="[Pipeline] CI Build Failure on main: ${SHORT_SUMMARY}"
+             BODY=$(printf '%s\n' \
+               "## CI Build Failure on \`main\`" \
+               "" \
+               "- **Run**: ${RUN_URL}" \
+               "- **Branch**: \`${HEAD_BRANCH}\`" \
+               "- **Commit**: \`${HEAD_SHA}\`" \
+               "- **Failure Type**: ${FAILURE_TYPE}" \
+               "- **Failure Signature**: \`${FAILURE_SIGNATURE}\`" \
+               "" \
+               "### Failure Summary" \
+               "${FAILURE_SUMMARY}" \
+               "" \
+               "### Failed-Step Excerpt" \
+               '```text' \
+               "${FAILURE_EXCERPT}" \
+               '```' \
+               "" \
+               "> This issue was created automatically by the CI Failure Router workflow.")
+             DRILL_ID=$(extract_drill_id)
+             BODY=$(append_drill_metadata "$BODY" "$DRILL_ID")
+             ISSUE_ARGS=()
             for label in pipeline bug automation; do
               if has_label "$label"; then
                 ISSUE_ARGS+=(--label "$label")
