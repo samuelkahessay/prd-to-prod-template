@@ -1,0 +1,57 @@
+#
+# Pipeline Watchdog — Cron-based stall detector and CI incident retry/escalation loop.
+#
+# Detects four conditions:
+#   1. Active CI repair incidents on [Pipeline] PRs that need a retry or escalation
+#   2. Stalled [Pipeline] PRs with CHANGES_REQUESTED reviews and no active CI incident
+#   3. Orphaned pipeline issues with no linked open PR
+#   4. Stale [aw] workflow failure issues that need a repo-assist retry
+#
+
+name: "Pipeline Watchdog"
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: "pipeline-watchdog"
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PIPELINE_HEALING_ENABLED: ${{ vars.PIPELINE_HEALING_ENABLED }}
+    steps:
+      - name: Checkout repository helpers
+        uses: actions/checkout@v4
+
+      - name: Check healing pause switch
+        id: healing
+        run: |
+          if scripts/healing-control.sh is-enabled; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=healing_paused" >> "$GITHUB_OUTPUT"
+            echo "Autonomous healing is paused via PIPELINE_HEALING_ENABLED."
+          fi
+
+      - name: Check for stalled pipeline items
+        if: steps.healing.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: bash scripts/pipeline-watchdog.sh

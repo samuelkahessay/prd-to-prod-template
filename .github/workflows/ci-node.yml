@@ -1,0 +1,41 @@
+name: Node CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check-profile:
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .deploy-profile
+          sparse-checkout-cone-mode: false
+      - id: check
+        run: |
+          PROFILE=$(cat .deploy-profile 2>/dev/null || echo "dotnet-azure")
+          if [[ "$PROFILE" == "nextjs-vercel" ]]; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "Skipping Node CI — active profile is '${PROFILE}'"
+          fi
+
+  build-and-test:
+    needs: check-profile
+    if: needs.check-profile.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
