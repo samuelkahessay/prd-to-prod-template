@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TEMP_FILE=""
-cleanup() { [[ -n "$TEMP_FILE" ]] && rm -f "$TEMP_FILE"; }
+cleanup() { [[ -n "$TEMP_FILE" ]] && rm -f "$TEMP_FILE" || true; }
 trap cleanup EXIT
 
 ###############################################################################
