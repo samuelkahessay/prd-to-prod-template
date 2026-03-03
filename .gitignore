@@ -9,6 +9,11 @@
 node_modules/
 dist/
 .next/
+/out/
+/build
+/coverage
+*.tsbuildinfo
+next-env.d.ts
 .github/aw/
 .vscode/
 .vercel/
