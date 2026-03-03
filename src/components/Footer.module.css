@@ -1,0 +1,8 @@
+.footer {
+  padding: 2rem 0;
+  text-align: center;
+  font-family: monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
