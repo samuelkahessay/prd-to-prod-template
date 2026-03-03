@@ -2,10 +2,10 @@
 
 ## How this repo works
 
-This is **prd-to-prod-template** — a GitHub template repo for autonomous software pipelines powered by gh-aw (GitHub Agentic Workflows). It serves two purposes:
+This is a GitHub template repo for autonomous software pipelines powered by gh-aw (GitHub Agentic Workflows). It serves two purposes:
 
 1. **Template**: Anyone can fork it, run `./setup.sh`, and have a working autonomous pipeline
-2. **Landing page**: The repo itself hosts a Next.js landing page at https://prd-to-prod.vercel.app — the pipeline's first customer is itself (meta)
+2. **Landing page**: The repo itself hosts a Next.js landing page at https://your-project.vercel.app — the pipeline's first customer is itself (meta)
 
 Issues labeled `pipeline` are picked up by the `repo-assist` agent, which implements them, opens PRs, and the review/merge chain handles the rest.
 
@@ -22,15 +22,15 @@ We write **design briefs as GitHub issues**, not code. The pipeline agents do th
 
 ## Source repo
 
-This template was extracted from `prd-to-prod` (the source repo). When syncing changes:
-- Source: `/Users/skahessay/Documents/Projects/active/prd-to-prod`
-- Template: `/Users/skahessay/Documents/Projects/active/prd-to-prod-template`
+This template was extracted from the source `prd-to-prod` repository. When syncing changes:
+- Source: `~/your-path/prd-to-prod`
+- Template: `~/your-path/prd-to-prod-template`
 - Extraction plan: `docs/plans/2026-03-02-template-repo-extraction.md` (all phases complete)
 
 ## Landing page
 
 **Stack**: Next.js 16 (App Router), CSS Modules, GSAP, Canvas API, Vercel
-**Live**: https://prd-to-prod.vercel.app (custom alias) and https://prd-to-prod-template.vercel.app
+**Live**: https://your-project.vercel.app (custom alias) and https://your-project-template.vercel.app
 **Design doc**: `docs/plans/2026-03-03-landing-page-design.md`
 
 ### Key files
@@ -49,7 +49,7 @@ This template was extracted from `prd-to-prod` (the source repo). When syncing c
 - **Typography**: Instrument Serif (headlines), Inter 300 (body), monospace (labels/code)
 - **Layout**: 860px max-width content column, 1px border grid between sections, no border-radius
 - **Interactions**: Magnetic cursor, scroll reveal, spring-physics canvas animations, mouse repulsion
-- **Aesthetic**: Cold brutalist. Inspired by skahessay.dev (dark minimal) + WS-Demo-Presentation (narrative scroll + canvas)
+- **Aesthetic**: Cold brutalist. Inspired by dark minimal design + narrative scroll + canvas
 
 ### Pipeline visualization (PipelineCanvas.tsx)
 8 nodes representing real agents with 3 flow paths:
@@ -61,12 +61,12 @@ This template was extracted from `prd-to-prod` (the source repo). When syncing c
 
 ### Vercel deployment
 - `deploy-router.yml` → `deploy-vercel.yml` on push to main
-- **Custom alias gotcha**: `prd-to-prod.vercel.app` is a manual alias. Workflow deploys go to `prd-to-prod-template.vercel.app` automatically but do NOT update the custom alias. After workflow deploys, re-alias with: `npx vercel alias <deployment-url> prd-to-prod.vercel.app`
-- Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID` (`team_b5f1QjAi01JNv4Dza2BrhRHH`), `VERCEL_PROJECT_ID` (`prj_pLis8CoYc5jyglpTpFC1fJdAKJ0C`)
+- **Custom alias gotcha**: `your-project.vercel.app` is a manual alias. Workflow deploys go to `your-project-template.vercel.app` automatically but do NOT update the custom alias. After workflow deploys, re-alias with: `npx vercel alias <deployment-url> your-project.vercel.app`
+- Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID` (`YOUR_VERCEL_TEAM_ID`), `VERCEL_PROJECT_ID` (`YOUR_VERCEL_PROJECT_ID`)
 
 ## GitHub App
 
-**Name**: `prd-to-prod-pipeline` (App ID: `2995372`)
+**Name**: `prd-to-prod-pipeline` (App ID: `YOUR_GITHUB_APP_ID`)
 **Purpose**: Token vending machine — workflows mint short-lived tokens via `actions/create-github-app-token@v1`
 **Permissions**: Contents R/W, Issues R/W, Pull requests R/W, Actions R/W
 **Webhook**: Inactive (not needed — App is only used for token minting)

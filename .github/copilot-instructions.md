@@ -44,8 +44,7 @@ scripts/                         # Pipeline infrastructure (PERMANENT)
   start-run.sh                   # Prepare for a new PRD run
   monitor-pipeline.sh            # Live monitoring loop
 showcase/                        # Completed run portfolios (PERMANENT)
-  01-code-snippet-manager/       # Run 1 summary → tag v1.0.0
-  02-pipeline-observatory/       # Run 2 summary → tag v2.0.0
+  <run-summaries-appear-here>/   # Each completed PRD gets a summary directory
 AGENTS.md                        # Coding standards for all agents
 src/                             # PRD implementation code (EPHEMERAL)
 package.json, tsconfig.json ...  # PRD-specific configs (EPHEMERAL)

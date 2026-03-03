@@ -3,6 +3,8 @@
 *.swo
 *~
 *.log
+*.db
+*.db-journal
 .env
 .env.*
 .claude/
@@ -17,6 +19,7 @@ next-env.d.ts
 .github/aw/
 .vscode/
 .vercel/
+.sisyphus/
 aw-prompts/
 aw_info.json
 mcp-logs/

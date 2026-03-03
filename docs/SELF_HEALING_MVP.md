@@ -33,9 +33,9 @@ Configure these repository secrets before using the autonomous lane:
 - `COPILOT_GITHUB_TOKEN`
 - `GH_AW_GITHUB_TOKEN`
 - `GH_AW_PROJECT_GITHUB_TOKEN`
-- `AZURE_CLIENT_ID`
-- `AZURE_TENANT_ID`
-- `AZURE_SUBSCRIPTION_ID`
+- `YOUR_CLOUD_PROVIDER_CLIENT_ID` (or equivalent authentication credential)
+- `YOUR_CLOUD_PROVIDER_TENANT_ID` (or equivalent authentication credential)
+- `YOUR_CLOUD_PROVIDER_SUBSCRIPTION_ID` (or equivalent resource identifier)
 
 ## Required Repo Settings
 
