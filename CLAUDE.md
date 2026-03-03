@@ -5,7 +5,7 @@
 This is a GitHub template repo for autonomous software pipelines powered by gh-aw (GitHub Agentic Workflows). It serves two purposes:
 
 1. **Template**: Anyone can fork it, run `./setup.sh`, and have a working autonomous pipeline
-2. **Landing page**: The repo itself hosts a Next.js landing page at https://your-project.vercel.app — the pipeline's first customer is itself (meta)
+2. **Landing page**: The repo itself hosts a Next.js landing page at `https://<your-project>.vercel.app` (replace with your actual deployment URL) — the pipeline's first customer is itself (meta)
 
 Issues labeled `pipeline` are picked up by the `repo-assist` agent, which implements them, opens PRs, and the review/merge chain handles the rest.
 
@@ -23,14 +23,14 @@ We write **design briefs as GitHub issues**, not code. The pipeline agents do th
 ## Source repo
 
 This template was extracted from the source `prd-to-prod` repository. When syncing changes:
-- Source: `~/your-path/prd-to-prod`
-- Template: `~/your-path/prd-to-prod-template`
-- Extraction plan: `docs/plans/2026-03-02-template-repo-extraction.md` (all phases complete)
+- Source: `/path/to/your/prd-to-prod` (replace with your actual clone path)
+- Template: `/path/to/your/prd-to-prod-template` (replace with your actual clone path)
+- Extraction plan: Template extraction is complete (original plan archived in source repo)
 
 ## Landing page
 
 **Stack**: Next.js 16 (App Router), CSS Modules, GSAP, Canvas API, Vercel
-**Live**: https://your-project.vercel.app (custom alias) and https://your-project-template.vercel.app
+**Live**: `https://<your-project>.vercel.app` (replace with your actual deployment URL)
 **Design doc**: `docs/plans/2026-03-03-landing-page-design.md`
 
 ### Key files
@@ -61,7 +61,7 @@ This template was extracted from the source `prd-to-prod` repository. When synci
 
 ### Vercel deployment
 - `deploy-router.yml` → `deploy-vercel.yml` on push to main
-- **Custom alias gotcha**: `your-project.vercel.app` is a manual alias. Workflow deploys go to `your-project-template.vercel.app` automatically but do NOT update the custom alias. After workflow deploys, re-alias with: `npx vercel alias <deployment-url> your-project.vercel.app`
+- **Custom alias gotcha**: `<your-project>.vercel.app` is a manual alias. Workflow deploys go to `<your-project>-template.vercel.app` automatically but do NOT update the custom alias. After workflow deploys, re-alias with: `npx vercel alias <deployment-url> <your-project>.vercel.app`
 - Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID` (`YOUR_VERCEL_TEAM_ID`), `VERCEL_PROJECT_ID` (`YOUR_VERCEL_PROJECT_ID`)
 
 ## GitHub App

@@ -30,9 +30,8 @@ The control plane remains human-owned:
 
 Configure these repository secrets before using the autonomous lane:
 
-- `COPILOT_GITHUB_TOKEN`
-- `GH_AW_GITHUB_TOKEN`
-- `GH_AW_PROJECT_GITHUB_TOKEN`
+- `PIPELINE_APP_ID` (variable) + `PIPELINE_APP_PRIVATE_KEY` (secret) — GitHub App for token minting (recommended)
+- `GH_AW_GITHUB_TOKEN` (secret) — Personal Access Token fallback if App not configured
 - `YOUR_CLOUD_PROVIDER_CLIENT_ID` (or equivalent authentication credential)
 - `YOUR_CLOUD_PROVIDER_TENANT_ID` (or equivalent authentication credential)
 - `YOUR_CLOUD_PROVIDER_SUBSCRIPTION_ID` (or equivalent resource identifier)
@@ -90,17 +89,17 @@ npm test
 
 ## Audit Drill Command
 
-Use the known-good March 1, 2026 drill commit to verify the end-to-end repair
-path without mutating `main`:
+To verify the end-to-end repair path without mutating `main`, use an audit
+commit SHA from a known-good drill run:
 
 ```bash
-bash scripts/verify-mvp.sh --audit-commit ff2f18746416dfb8ae8bfe1e414e031983a5fb73
+bash scripts/verify-mvp.sh --audit-commit <COMMIT_SHA>
 ```
 
 The raw audit command is:
 
 ```bash
-bash scripts/self-healing-drill.sh audit ff2f18746416dfb8ae8bfe1e414e031983a5fb73
+bash scripts/self-healing-drill.sh audit <COMMIT_SHA>
 ```
 
 ## Live Drill Command

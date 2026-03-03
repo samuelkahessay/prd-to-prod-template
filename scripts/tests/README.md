@@ -39,6 +39,6 @@ When porting tests from the source repo:
 ## Framework
 
 Tests are primarily shell scripts for simplicity and portability. Some tests may use:
-- `bats` (Bash Automated Testing System) for assertion helpers
+- `bats` — Bash Automated Testing System for assertion helpers
 - `jq` for JSON validation
 - GitHub CLI (`gh`) for API validation
