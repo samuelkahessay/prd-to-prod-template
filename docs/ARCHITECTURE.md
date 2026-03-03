@@ -15,7 +15,9 @@ model is not a flat count. It is a control plane plus a bounded execution lane.
 
 ```mermaid
 flowchart LR
-  H["Human Intent"] --> D["PRD Decomposer"]
+  H["Human Intent"] --> PL["PRD Planner"]
+  PL --> AP["Human Approval"]
+  AP --> D["PRD Decomposer"]
   P["Autonomy Policy"] --> G["Review + Merge Gate"]
   D --> I["Pipeline Issues"]
   I --> A["Repo Assist"]
@@ -45,6 +47,20 @@ The AI lane is intentionally bounded. The following remain human-owned:
 
 The system is designed to stop rather than silently widen its own authority.
 
+## Planning Layer
+
+An optional architecture planning step sits between PRD intake and decomposition:
+
+```
+PRD Issue → /plan → prd-planner → Architecture Comment + JSON Artifact
+  → /approve-architecture → prd-decomposer (architecture-aware) → Issues
+```
+
+- **`prd-planner`** (gh-aw agent): Reads the PRD + deploy profile + existing codebase. Produces a human-readable architecture comment on the issue and a structured JSON artifact in repo-memory at `architecture/{issue-number}.json`.
+- **`architecture-approve.yml`**: Listens for `/approve-architecture`, verifies write access, swaps `architecture-draft` → `architecture-approved`, dispatches the decomposer.
+- **Downstream integration**: If an architecture artifact exists, `prd-decomposer` uses it for issue sequencing, component references, and pattern consistency. `repo-assist` reads it for implementation context. Both fall back to current behavior when no artifact exists.
+- **Autonomy policy**: `architecture_planning` is autonomous. The human approval gate (`/approve-architecture`) is the review boundary.
+
 ## Workflow Groups
 
 ### 1. Ingress and Routing
@@ -53,6 +69,8 @@ These workflows decide what enters the autonomous lane and when.
 
 | Workflow | Role |
 |---|---|
+| `prd-planner.lock.yml` | Reads PRDs and produces structured architecture plans for human review |
+| `architecture-approve.yml` | Gates architecture approval, swaps labels, and dispatches the decomposer |
 | `prd-decomposer.lock.yml` | Converts PRDs into dependency-ordered pipeline issues with acceptance criteria |
 | `auto-dispatch.yml` | Accepts `pipeline` issues, classifies actionability, debounces, and dispatches `repo-assist` |
 | `auto-dispatch-requeue.yml` | Starts the next deferred issue after the current `repo-assist` run finishes |

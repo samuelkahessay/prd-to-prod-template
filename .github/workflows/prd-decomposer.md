@@ -38,6 +38,7 @@ tools:
   bash: true
   github:
     toolsets: [issues, labels]
+  repo-memory: true
 
 ---
 
@@ -97,6 +98,33 @@ If the instructions above contain a URL or file path, fetch/read that content as
 
 11. **Self-contained does not mean weaker.** If a PRD requirement belongs to this issue, preserve it exactly even when you rewrite it into issue-local language. Duplicate the exact contractual detail into this issue's traceability and acceptance criteria rather than replacing it with a looser summary.
 
+## Architecture-Aware Decomposition
+
+Before creating issues, check repo-memory for an architecture artifact at `architecture/{issue-number}.json`.
+
+### If an architecture artifact exists:
+
+1. **Use `decomposition_order`** from the artifact to sequence issue creation instead of the default heuristic (infrastructure → features → tests).
+
+2. **Reference `components`** in each issue's `## Technical Notes` section. For each issue, include the relevant component names, types, and `file_hint` paths from the artifact.
+
+3. **Reference `patterns`** from the artifact in acceptance criteria where applicable. If the architecture specifies a pattern (e.g., "Three-disposition classification"), issues that implement that pattern should reference it.
+
+4. **Preserve `requirements`** from the artifact. Cross-reference each issue's acceptance criteria against the artifact's requirements to ensure coverage. Every `must` requirement must appear in at least one issue's acceptance criteria.
+
+5. **Add a `## Architecture Context` section** to each issue (after PRD Traceability):
+   ```
+   ## Architecture Context
+   - **Architecture Plan**: Approved on #{prd-issue-number}
+   - **Component**: {component name} ({component type})
+   - **File Hint**: {file_hint from artifact}
+   - **Related Patterns**: {relevant pattern names}
+   ```
+
+### If no architecture artifact exists:
+
+Fall back to current behavior — use heuristic ordering and infer architecture from the PRD and codebase. This preserves backward compatibility for PRDs that skip the planning step.
+
 ## Delivery Mode Detection
 
 Before planning issues, inspect the repository state and determine whether the PRD is:
@@ -129,7 +157,11 @@ Before creating issues, determine the target tech stack and deploy profile:
 
 1. **Check the PRD for explicit stack preference.** Look for mentions of specific frameworks (Next.js, React, .NET, Express), languages (TypeScript, C#, Python), or deployment targets (Vercel, Azure, Docker).
 
-2. **If no explicit preference**, use the `nextjs-vercel` profile (the default for this template).
+2. **If no explicit preference**, infer from the requirements:
+   - Web dashboard, landing page, interactive UI, visualization → `nextjs-vercel`
+   - API service, enterprise backend, .NET/C# → `dotnet-azure`
+   - Multi-language, microservices, or unclear → `docker-generic`
+   - Default (no clear signals): `nextjs-vercel` (the default profile for this template)
 
 3. **Read the selected deploy profile** from `.github/deploy-profiles/{profile-name}.yml` to understand the build, test, and deploy configuration.
 
