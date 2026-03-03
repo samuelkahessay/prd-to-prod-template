@@ -117,18 +117,6 @@ header "Compiled Workflows"
 WORKFLOWS_DIR="$REPO_ROOT/.github/workflows"
 EXPECTED_AGENTS=(repo-assist pr-review-agent prd-decomposer pipeline-status ci-doctor code-simplifier)
 
-# Count .lock.yml files
-LOCK_COUNT=0
-if [[ -d "$WORKFLOWS_DIR" ]]; then
-  LOCK_COUNT=$(find "$WORKFLOWS_DIR" -maxdepth 1 -name "*.lock.yml" 2>/dev/null | wc -l | tr -d '[:space:]')
-fi
-
-if [[ "$LOCK_COUNT" -gt 0 ]]; then
-  pass "$LOCK_COUNT compiled workflow(s) found (.lock.yml)"
-else
-  fail "No compiled workflows found (run: gh aw compile)"
-fi
-
 for agent in "${EXPECTED_AGENTS[@]}"; do
   if [[ -f "$WORKFLOWS_DIR/${agent}.lock.yml" ]]; then
     pass "${agent}.lock.yml exists"
@@ -199,8 +187,7 @@ fi
 header "Repo Settings"
 
 if [[ "$GH_AUTH_OK" == true ]]; then
-  # Check auto-merge enabled
-  AUTO_MERGE=$(gh api repos/{owner}/{repo} --jq '.allow_auto_merge' 2>/dev/null || echo "")
+  AUTO_MERGE=$(gh api repos/:owner/:repo --jq '.allow_auto_merge' 2>/dev/null || echo "")
   if [[ "$AUTO_MERGE" == "true" ]]; then
     pass "Auto-merge is enabled"
   elif [[ -z "$AUTO_MERGE" ]]; then
@@ -208,16 +195,15 @@ if [[ "$GH_AUTH_OK" == true ]]; then
   else
     fail "Auto-merge is not enabled (run: ./scripts/bootstrap.sh)"
   fi
-
-  # Check memory/repo-assist branch
-  if git ls-remote --heads origin memory/repo-assist 2>/dev/null | grep -q memory/repo-assist; then
-    pass "memory/repo-assist branch exists"
-  else
-    fail "memory/repo-assist branch not found (run: ./scripts/bootstrap.sh)"
-  fi
 else
   skip "Auto-merge setting (gh auth required)"
-  skip "memory/repo-assist branch (gh auth required)"
+fi
+
+# Check memory/repo-assist branch (uses git, no gh auth required)
+if git ls-remote --heads origin memory/repo-assist 2>/dev/null | grep -q memory/repo-assist; then
+  pass "memory/repo-assist branch exists"
+else
+  fail "memory/repo-assist branch not found (run: ./scripts/bootstrap.sh)"
 fi
 
 ###############################################################################
