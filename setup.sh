@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+TEMP_FILE=""
+cleanup() { [[ -n "$TEMP_FILE" ]] && rm -f "$TEMP_FILE"; }
+trap cleanup EXIT
+
 ###############################################################################
 # setup.sh — Interactive setup wizard for prd-to-prod template repos
 #
@@ -95,25 +99,25 @@ done
 prompt() {
   local var_name="$1" message="$2" default="$3"
   if [[ "$NON_INTERACTIVE" == true ]]; then
-    eval "$var_name=\"$default\""
+    printf -v "$var_name" '%s' "$default"
   else
     printf "%s [%s]: " "$message" "$default"
     local input
     read -r input
-    eval "$var_name=\"${input:-$default}\""
+    printf -v "$var_name" '%s' "${input:-$default}"
   fi
 }
 
 prompt_secret() {
   local var_name="$1" message="$2"
   if [[ "$NON_INTERACTIVE" == true ]]; then
-    eval "$var_name=''"
+    printf -v "$var_name" '%s' ""
   else
     printf "%s: " "$message"
     local input
     read -rs input
     echo ""
-    eval "$var_name=\"$input\""
+    printf -v "$var_name" '%s' "$input"
   fi
 }
 
@@ -210,7 +214,8 @@ fi
 if [[ "$APP_DIR" != "src" ]]; then
   # Replace the exact line "      - src/**" (app_code_change target) but not
   # the sensitive path lines like "      - src/**/auth/**"
-  sed_inplace "s|^      - src/\*\*$|      - ${APP_DIR}/**|" "$POLICY_FILE"
+  ESCAPED_APP_DIR=$(printf '%s\n' "$APP_DIR" | sed 's/[&\\/]/\\&/g')
+  sed_inplace "s|^      - src/\*\*$|      - ${ESCAPED_APP_DIR}/**|" "$POLICY_FILE"
   info "Replaced src/** with ${APP_DIR}/** in app_code_change"
 else
   info "App directory is 'src' (default) — no app_code_change patch needed"
@@ -250,7 +255,8 @@ targets_started && !/^      - / {
 { print }
 ' "$POLICY_FILE" > "$TEMP_FILE"
 
-mv "$TEMP_FILE" "$POLICY_FILE"
+cat "$TEMP_FILE" > "$POLICY_FILE"
+rm -f "$TEMP_FILE"
 
 info "Updated sensitive paths to: ${SENSITIVE_DIRS}"
 
@@ -273,7 +279,7 @@ if [[ "$NON_INTERACTIVE" == true ]]; then
   echo "  gh secret set GH_AW_GITHUB_TOKEN"
 else
   prompt SETUP_PAT_NOW "Set GH_AW_GITHUB_TOKEN now? (y/n)" "y"
-  if [[ "$SETUP_PAT_NOW" == "y" || "$SETUP_PAT_NOW" == "Y" ]]; then
+  if [[ "$SETUP_PAT_NOW" =~ ^[Yy] ]]; then
     prompt_secret PAT_VALUE "Paste your PAT (input hidden)"
     if [[ -n "$PAT_VALUE" ]]; then
       echo "$PAT_VALUE" | gh secret set GH_AW_GITHUB_TOKEN
@@ -304,7 +310,7 @@ if [[ "$NON_INTERACTIVE" == true ]]; then
   echo "  gh secret set VERCEL_PROJECT_ID"
 else
   prompt SETUP_VERCEL_NOW "Set Vercel secrets now? (y/n)" "y"
-  if [[ "$SETUP_VERCEL_NOW" == "y" || "$SETUP_VERCEL_NOW" == "Y" ]]; then
+  if [[ "$SETUP_VERCEL_NOW" =~ ^[Yy] ]]; then
     prompt_secret VERCEL_TOKEN_VALUE "VERCEL_TOKEN (input hidden)"
     if [[ -n "$VERCEL_TOKEN_VALUE" ]]; then
       echo "$VERCEL_TOKEN_VALUE" | gh secret set VERCEL_TOKEN
@@ -366,7 +372,7 @@ if [[ "$NON_INTERACTIVE" == true ]]; then
   echo "  gh aw secrets bootstrap"
 else
   prompt RUN_AW_SECRETS "Run 'gh aw secrets bootstrap' now? (y/n)" "y"
-  if [[ "$RUN_AW_SECRETS" == "y" || "$RUN_AW_SECRETS" == "Y" ]]; then
+  if [[ "$RUN_AW_SECRETS" =~ ^[Yy] ]]; then
     gh aw secrets bootstrap || {
       warn "gh aw secrets bootstrap failed — run it manually later"
     }
