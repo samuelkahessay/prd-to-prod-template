@@ -261,34 +261,77 @@ rm -f "$TEMP_FILE"
 info "Updated sensitive paths to: ${SENSITIVE_DIRS}"
 
 ###############################################################################
-# Step 5: PAT Setup (GH_AW_GITHUB_TOKEN)
+# Step 5: Pipeline Authentication
 ###############################################################################
-header "Step 5: GitHub PAT for Pipeline"
+header "Step 5: Pipeline Authentication"
 
-echo "The pipeline needs a Personal Access Token (GH_AW_GITHUB_TOKEN) to:"
-echo "  - Create issues that trigger automation (bypasses GitHub anti-cascade rule)"
-echo "  - Enable auto-merge on approved PRs"
-echo "  - Dispatch workflow runs across the pipeline"
+echo "The pipeline needs elevated permissions for auto-merge, issue creation,"
+echo "and workflow dispatch (bypasses GitHub's anti-cascade rule)."
 echo ""
-echo "Create a fine-grained PAT with 'repo' and 'workflow' scopes."
-echo "Guide: https://docs.github.com/en/authentication/creating-a-personal-access-token"
+echo "Two options:"
+echo "  1. GitHub App (recommended) — auto-rotating tokens, scoped per job"
+echo "  2. Personal Access Token (PAT) — simpler setup, manual rotation"
 echo ""
 
 if [[ "$NON_INTERACTIVE" == true ]]; then
-  warn "Non-interactive mode: set the PAT manually with:"
-  echo "  gh secret set GH_AW_GITHUB_TOKEN"
+  AUTH_METHOD="2"
+  warn "Non-interactive mode: defaulting to PAT auth"
 else
-  prompt SETUP_PAT_NOW "Set GH_AW_GITHUB_TOKEN now? (y/n)" "y"
-  if [[ "$SETUP_PAT_NOW" =~ ^[Yy] ]]; then
-    prompt_secret PAT_VALUE "Paste your PAT (input hidden)"
-    if [[ -n "$PAT_VALUE" ]]; then
-      echo "$PAT_VALUE" | gh secret set GH_AW_GITHUB_TOKEN
-      info "GH_AW_GITHUB_TOKEN set"
-    else
-      warn "Empty value — skipping. Set it later with: gh secret set GH_AW_GITHUB_TOKEN"
-    fi
+  prompt AUTH_METHOD "Auth method (1=App, 2=PAT)" "1"
+fi
+
+if [[ "$AUTH_METHOD" == "1" ]]; then
+  # GitHub App path
+  echo ""
+  echo "Install the prd-to-prod pipeline App on your repo, then provide:"
+  echo "  - PIPELINE_APP_ID (from App settings page)"
+  echo "  - PIPELINE_APP_PRIVATE_KEY (generate in App settings > Private keys)"
+  echo ""
+
+  if [[ "$NON_INTERACTIVE" == true ]]; then
+    warn "Non-interactive mode: set App credentials manually:"
+    echo "  gh variable set PIPELINE_APP_ID"
+    echo "  gh secret set PIPELINE_APP_PRIVATE_KEY"
   else
-    warn "Skipped. Set it later with: gh secret set GH_AW_GITHUB_TOKEN"
+    prompt APP_ID_VALUE "PIPELINE_APP_ID" ""
+    if [[ -n "$APP_ID_VALUE" ]]; then
+      gh variable set PIPELINE_APP_ID --body "$APP_ID_VALUE"
+      info "PIPELINE_APP_ID variable set"
+    else
+      warn "Empty value — set it later: gh variable set PIPELINE_APP_ID"
+    fi
+
+    prompt_secret APP_KEY_VALUE "PIPELINE_APP_PRIVATE_KEY (paste PEM, then Enter)"
+    if [[ -n "$APP_KEY_VALUE" ]]; then
+      echo "$APP_KEY_VALUE" | gh secret set PIPELINE_APP_PRIVATE_KEY
+      info "PIPELINE_APP_PRIVATE_KEY secret set"
+    else
+      warn "Empty value — set it later: gh secret set PIPELINE_APP_PRIVATE_KEY"
+    fi
+  fi
+else
+  # PAT path
+  echo ""
+  echo "Create a fine-grained PAT with 'repo' and 'workflow' scopes."
+  echo "Guide: https://docs.github.com/en/authentication/creating-a-personal-access-token"
+  echo ""
+
+  if [[ "$NON_INTERACTIVE" == true ]]; then
+    warn "Non-interactive mode: set the PAT manually with:"
+    echo "  gh secret set GH_AW_GITHUB_TOKEN"
+  else
+    prompt SETUP_PAT_NOW "Set GH_AW_GITHUB_TOKEN now? (y/n)" "y"
+    if [[ "$SETUP_PAT_NOW" =~ ^[Yy] ]]; then
+      prompt_secret PAT_VALUE "Paste your PAT (input hidden)"
+      if [[ -n "$PAT_VALUE" ]]; then
+        echo "$PAT_VALUE" | gh secret set GH_AW_GITHUB_TOKEN
+        info "GH_AW_GITHUB_TOKEN set"
+      else
+        warn "Empty value — skipping. Set it later: gh secret set GH_AW_GITHUB_TOKEN"
+      fi
+    else
+      warn "Skipped. Set it later: gh secret set GH_AW_GITHUB_TOKEN"
+    fi
   fi
 fi
 

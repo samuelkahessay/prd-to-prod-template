@@ -220,14 +220,19 @@ fully automated path inside the lane.
 Decision logs, operator views, and status issues exist because a real operator
 needs to know what the system is doing, what it refused to do, and why.
 
-## Secrets
+## Secrets and Auth
 
-| Secret | Purpose |
-|---|---|
-| `GH_AW_GITHUB_TOKEN` | Auto-merge, workflow dispatch, and GitHub API actions that must outlive `GITHUB_TOKEN` cascade limits |
-| `VERCEL_TOKEN` | Vercel deployment token (Vercel profile) |
-| `VERCEL_ORG_ID` | Vercel organization ID (Vercel profile) |
-| `VERCEL_PROJECT_ID` | Vercel project ID (Vercel profile) |
+Pipeline workflows mint a short-lived GitHub App token when `PIPELINE_APP_ID` is
+set, falling back to the `GH_AW_GITHUB_TOKEN` PAT.
+
+| Config | Type | Purpose |
+|---|---|---|
+| `PIPELINE_APP_ID` | Variable | GitHub App ID (recommended auth) |
+| `PIPELINE_APP_PRIVATE_KEY` | Secret | GitHub App PEM key (recommended auth) |
+| `GH_AW_GITHUB_TOKEN` | Secret | PAT fallback for auto-merge and workflow dispatch |
+| `VERCEL_TOKEN` | Secret | Vercel deployment token |
+| `VERCEL_ORG_ID` | Secret | Vercel organization ID |
+| `VERCEL_PROJECT_ID` | Secret | Vercel project ID |
 
 ## Repo Settings
 

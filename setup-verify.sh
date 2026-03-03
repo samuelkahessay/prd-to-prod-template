@@ -153,30 +153,53 @@ else
 fi
 
 ###############################################################################
-# Section 5: Secrets
+# Section 5: Pipeline Auth and Secrets
 ###############################################################################
-header "Secrets"
-
-REQUIRED_SECRETS=(GH_AW_GITHUB_TOKEN VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID)
+header "Pipeline Auth and Secrets"
 
 if [[ "$GH_AUTH_OK" == true ]]; then
   SECRET_LIST=$(gh secret list --json name -q '.[].name' 2>/dev/null || echo "")
-  if [[ -n "$SECRET_LIST" ]]; then
-    for secret in "${REQUIRED_SECRETS[@]}"; do
-      if echo "$SECRET_LIST" | grep -qx "$secret"; then
-        pass "Secret '$secret' is set"
-      else
-        fail "Secret '$secret' not found (run: gh secret set $secret)"
-      fi
-    done
-  else
-    # gh secret list may return empty if no secrets are set — that's a valid response
-    for secret in "${REQUIRED_SECRETS[@]}"; do
-      fail "Secret '$secret' not found (run: gh secret set $secret)"
-    done
+  VAR_LIST=$(gh variable list --json name -q '.[].name' 2>/dev/null || echo "")
+
+  # Check pipeline auth: App OR PAT
+  APP_ID_SET=false
+  APP_KEY_SET=false
+  PAT_SET=false
+
+  if echo "$VAR_LIST" | grep -qx "PIPELINE_APP_ID" 2>/dev/null; then
+    pass "Variable 'PIPELINE_APP_ID' is set"
+    APP_ID_SET=true
   fi
+
+  if echo "$SECRET_LIST" | grep -qx "PIPELINE_APP_PRIVATE_KEY" 2>/dev/null; then
+    pass "Secret 'PIPELINE_APP_PRIVATE_KEY' is set"
+    APP_KEY_SET=true
+  fi
+
+  if echo "$SECRET_LIST" | grep -qx "GH_AW_GITHUB_TOKEN" 2>/dev/null; then
+    pass "Secret 'GH_AW_GITHUB_TOKEN' is set"
+    PAT_SET=true
+  fi
+
+  if [[ "$APP_ID_SET" == true && "$APP_KEY_SET" == true ]]; then
+    pass "Pipeline auth: GitHub App configured"
+  elif [[ "$PAT_SET" == true ]]; then
+    pass "Pipeline auth: PAT configured"
+  else
+    fail "Pipeline auth: need GitHub App (PIPELINE_APP_ID + PIPELINE_APP_PRIVATE_KEY) or PAT (GH_AW_GITHUB_TOKEN)"
+  fi
+
+  # Check Vercel secrets
+  for secret in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+    if echo "$SECRET_LIST" | grep -qx "$secret" 2>/dev/null; then
+      pass "Secret '$secret' is set"
+    else
+      fail "Secret '$secret' not found (run: gh secret set $secret)"
+    fi
+  done
 else
-  for secret in "${REQUIRED_SECRETS[@]}"; do
+  skip "Pipeline auth check (gh auth required)"
+  for secret in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
     skip "Secret '$secret' (gh auth required)"
   done
 fi

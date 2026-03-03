@@ -104,11 +104,33 @@ When CI fails on `main`, the pipeline:
 
 This loop is autonomous — zero human intervention required.
 
-## Secrets Reference
+## Authentication
+
+The pipeline needs elevated permissions for auto-merge and workflow dispatch.
+The setup wizard offers both options.
+
+### Option 1: GitHub App (Recommended)
+
+Auto-rotating tokens scoped per job. No manual rotation needed.
+
+| Config | Type | Purpose |
+|--------|------|---------|
+| `PIPELINE_APP_ID` | Variable | App ID from the App settings page |
+| `PIPELINE_APP_PRIVATE_KEY` | Secret | PEM private key generated in App settings |
+
+### Option 2: Personal Access Token
+
+Simpler setup. Create a [fine-grained PAT](https://github.com/settings/tokens?type=beta)
+with Contents, Issues, Pull requests, Actions, and Workflows permissions.
+
+| Config | Type | Purpose |
+|--------|------|---------|
+| `GH_AW_GITHUB_TOKEN` | Secret | PAT for auto-merge and workflow dispatch |
+
+### Deployment Secrets
 
 | Secret | Required | Purpose |
 |--------|----------|---------|
-| `GH_AW_GITHUB_TOKEN` | Yes | PAT for auto-merge and workflow dispatch (bypasses GitHub anti-cascade) |
 | `VERCEL_TOKEN` | Yes | Vercel deployment token |
 | `VERCEL_ORG_ID` | Yes | Vercel organization ID |
 | `VERCEL_PROJECT_ID` | Yes | Vercel project ID |
