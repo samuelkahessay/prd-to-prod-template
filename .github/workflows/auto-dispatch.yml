@@ -73,11 +73,19 @@ jobs:
         if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true'
         run: sleep 15
 
+      - name: Generate App token
+        id: app-token
+        if: vars.PIPELINE_APP_ID != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PIPELINE_APP_ID }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+
       - name: Skip when repo-assist already active
         if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true'
         id: guard
         env:
-          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           ACTIVE_RUNS=$(gh run list --repo "$REPO" \
@@ -126,7 +134,7 @@ jobs:
         if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true' && steps.guard.outputs.skip != 'true'
         id: dispatch_repo_assist
         env:
-          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           DISPATCHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

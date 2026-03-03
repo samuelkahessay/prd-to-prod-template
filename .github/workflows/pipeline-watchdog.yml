@@ -48,10 +48,18 @@ jobs:
             echo "Autonomous healing is paused via PIPELINE_HEALING_ENABLED."
           fi
 
+      - name: Generate App token
+        id: app-token
+        if: vars.PIPELINE_APP_ID != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PIPELINE_APP_ID }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+
       - name: Check for stalled pipeline items
         if: steps.healing.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          GH_AW_GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: bash scripts/pipeline-watchdog.sh

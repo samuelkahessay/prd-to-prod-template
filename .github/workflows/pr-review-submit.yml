@@ -84,6 +84,14 @@ jobs:
             autonomy-policy.yml
           sparse-checkout-cone-mode: false
 
+      - name: Generate App token
+        id: app-token
+        if: vars.PIPELINE_APP_ID != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PIPELINE_APP_ID }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+
       - name: Check healing pause switch
         id: healing
         run: |
@@ -314,7 +322,7 @@ jobs:
       - name: Enable auto-merge (APPROVE only)
         if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
         env:
-          MERGE_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.issue.number }}
           PR_TITLE: ${{ steps.review.outputs.pr_title }}
           REPO: ${{ github.repository }}
@@ -459,7 +467,7 @@ jobs:
       - name: Dispatch repo-assist for next cycle
         if: always() && steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict != '' && steps.healing.outputs.enabled == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
           REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
           REVIEW_SUMMARY: ${{ steps.review.outputs.summary }}
           PR_NUMBER: ${{ github.event.issue.number }}
@@ -535,6 +543,14 @@ jobs:
             scripts/check-autonomy-policy.sh
             autonomy-policy.yml
           sparse-checkout-cone-mode: false
+
+      - name: Generate App token
+        id: app-token
+        if: vars.PIPELINE_APP_ID != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PIPELINE_APP_ID }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
 
       - name: Check healing pause switch
         id: healing
@@ -743,7 +759,7 @@ jobs:
       - name: Enable auto-merge (APPROVE only)
         if: always() && github.event.inputs.verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
         env:
-          MERGE_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.inputs.pr_number }}
           REPO: ${{ github.repository }}
         run: |
@@ -905,7 +921,7 @@ jobs:
       - name: Dispatch repo-assist for next cycle
         if: always() && steps.healing.outputs.enabled == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
           REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
           INPUT_VERDICT: ${{ github.event.inputs.verdict }}
           REVIEW_SUMMARY: ${{ github.event.inputs.summary }}
@@ -984,10 +1000,18 @@ jobs:
             autonomy-policy.yml
           sparse-checkout-cone-mode: false
 
+      - name: Generate App token
+        id: app-token
+        if: vars.PIPELINE_APP_ID != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PIPELINE_APP_ID }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+
       - name: Approve sensitive path change
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
