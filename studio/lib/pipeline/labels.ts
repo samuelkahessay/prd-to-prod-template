@@ -32,28 +32,28 @@ export const LABEL_REPAIR = {
  * Type guard to check if a label is a type label
  */
 export function isTypeLabel(label: string): label is keyof typeof LABEL_TYPES {
-  return Object.values(LABEL_TYPES).includes(label as any);
+  return (Object.values(LABEL_TYPES) as string[]).includes(label);
 }
 
 /**
  * Type guard to check if a label is a state label
  */
 export function isStateLabel(label: string): label is keyof typeof LABEL_STATE {
-  return Object.values(LABEL_STATE).includes(label as any);
+  return (Object.values(LABEL_STATE) as string[]).includes(label);
 }
 
 /**
  * Type guard to check if a label is an architecture label
  */
 export function isArchitectureLabel(label: string): label is typeof LABEL_ARCHITECTURE[keyof typeof LABEL_ARCHITECTURE] {
-  return Object.values(LABEL_ARCHITECTURE).includes(label as any);
+  return (Object.values(LABEL_ARCHITECTURE) as string[]).includes(label);
 }
 
 /**
  * Type guard to check if a label is a repair label
  */
 export function isRepairLabel(label: string): label is typeof LABEL_REPAIR[keyof typeof LABEL_REPAIR] {
-  return Object.values(LABEL_REPAIR).includes(label as any);
+  return (Object.values(LABEL_REPAIR) as string[]).includes(label);
 }
 
 /**

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentType } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PrdTemplate } from "@/lib/prd/templates";
 import * as LucideIcons from "lucide-react";
@@ -12,7 +13,7 @@ interface CategoryCardProps {
 }
 
 export function CategoryCard({ template, onSelect, isSelected = false }: CategoryCardProps) {
-  const IconComponent = (LucideIcons as any)[template.icon] || LucideIcons.Box;
+  const IconComponent = (LucideIcons as unknown as Record<string, ComponentType<{ className?: string }>>)[template.icon] || LucideIcons.Box;
 
   return (
     <Card
