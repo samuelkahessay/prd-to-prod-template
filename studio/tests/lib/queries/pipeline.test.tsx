@@ -52,7 +52,7 @@ describe('usePipelineIssues', () => {
 
     (global.fetch as any).mockResolvedValue({
       ok: true,
-      json: async () => ({ issues: mockIssues }),
+      json: async () => ({ issues: mockIssues, rateLimitRemaining: 5000 }),
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
     });
 
@@ -63,7 +63,7 @@ describe('usePipelineIssues', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data).toEqual(mockIssues);
+    expect(result.current.data).toEqual({ issues: mockIssues, rateLimitRemaining: 5000 });
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/pipeline/issues?owner=test-owner&repo=test-repo')
     );
@@ -118,7 +118,7 @@ describe('usePipelinePRs', () => {
 
     (global.fetch as any).mockResolvedValue({
       ok: true,
-      json: async () => ({ pull_requests: mockPRs }),
+      json: async () => ({ pull_requests: mockPRs, rateLimitRemaining: 5000 }),
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
     });
 
@@ -129,7 +129,7 @@ describe('usePipelinePRs', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data).toEqual(mockPRs);
+    expect(result.current.data).toEqual({ pull_requests: mockPRs, rateLimitRemaining: 5000 });
   });
 
   it('does not fetch when owner or repo is null', () => {
@@ -165,7 +165,7 @@ describe('usePipelineWorkflows', () => {
 
     (global.fetch as any).mockResolvedValue({
       ok: true,
-      json: async () => ({ workflows: mockWorkflows }),
+      json: async () => ({ workflows: mockWorkflows, rateLimitRemaining: 5000 }),
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
     });
 
@@ -176,7 +176,7 @@ describe('usePipelineWorkflows', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data).toEqual(mockWorkflows);
+    expect(result.current.data).toEqual({ workflows: mockWorkflows, rateLimitRemaining: 5000 });
   });
 });
 
@@ -202,7 +202,7 @@ describe('usePipelineDeployments', () => {
 
     (global.fetch as any).mockResolvedValue({
       ok: true,
-      json: async () => ({ deployments: mockDeployments }),
+      json: async () => ({ deployments: mockDeployments, rateLimitRemaining: 5000 }),
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
     });
 
@@ -213,7 +213,7 @@ describe('usePipelineDeployments', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data).toEqual(mockDeployments);
+    expect(result.current.data).toEqual({ deployments: mockDeployments, rateLimitRemaining: 5000 });
   });
 });
 
@@ -232,6 +232,7 @@ describe('usePipelineOverview', () => {
       pull_requests: [],
       workflows: [],
       deployments: [],
+      rateLimitRemaining: 5000,
     };
 
     (global.fetch as any).mockResolvedValue({
@@ -281,6 +282,7 @@ describe('useIssueDetail', () => {
           created_at: '2026-03-03T00:01:00Z',
         },
       ],
+      rateLimitRemaining: 5000,
     };
 
     (global.fetch as any).mockResolvedValue({
@@ -339,6 +341,7 @@ describe('usePRDetail', () => {
           submitted_at: '2026-03-03T00:01:00Z',
         },
       ],
+      rateLimitRemaining: 5000,
     };
 
     (global.fetch as any).mockResolvedValue({

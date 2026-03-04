@@ -83,7 +83,7 @@ export async function GET(request: Request) {
     const rateLimit = rateLimitResponse.data.rate;
 
     return NextResponse.json(
-      { pull_requests: prs },
+      { pull_requests: prs, rateLimitRemaining: rateLimit.remaining },
       {
         headers: {
           'X-RateLimit-Limit': String(rateLimit.limit),

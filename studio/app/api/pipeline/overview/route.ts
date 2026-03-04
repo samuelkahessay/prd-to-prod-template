@@ -241,6 +241,7 @@ export async function GET(request: Request) {
         pull_requests,
         workflows,
         deployments,
+        rateLimitRemaining: rateLimit.remaining,
       },
       {
         headers: {
