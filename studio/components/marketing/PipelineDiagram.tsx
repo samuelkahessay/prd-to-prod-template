@@ -8,7 +8,7 @@ interface PipelineDiagramProps {
 
 const NODE_GAP = 72;
 const NODE_R = 14;
-const SVG_WIDTH = 120;
+const SVG_WIDTH = 180;
 const START_Y = 40;
 
 export function PipelineDiagram({ activeIndex }: PipelineDiagramProps) {

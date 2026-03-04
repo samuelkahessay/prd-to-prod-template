@@ -161,7 +161,7 @@ export function PipelineWalkthrough() {
           className="mt-16 hidden lg:flex lg:gap-12"
         >
           {/* Left: sticky pipeline diagram */}
-          <div className="w-[140px] shrink-0">
+          <div className="w-[180px] shrink-0">
             <div className="sticky top-24 h-[560px]">
               <PipelineDiagram activeIndex={activeIndex} />
             </div>
