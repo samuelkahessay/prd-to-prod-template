@@ -190,6 +190,10 @@ on:
         type: string
         required: false
         default: "true"
+      template_repo:
+        type: string
+        required: true
+        description: "Central template repo in owner/repo format"
       event_name:
         type: string
         required: true
@@ -198,10 +202,20 @@ on:
         type: string
         required: false
         default: ""
+      comment_id:
+        type: number
+        required: false
+        default: 0
+        description: "github.event.comment.id from caller"
       comment_user_login:
         type: string
         required: false
         default: ""
+      repository_owner:
+        type: string
+        required: false
+        default: ""
+        description: "github.repository_owner from caller"
       issue_number:
         type: number
         required: false
@@ -234,7 +248,7 @@ on:
         required: false
 ```
 
-Copy job logic. Replace `github.event.*` references with `inputs.*`. Script checkout for `healing-control.sh` and `check-autonomy-policy.sh`. Note: `autonomy-policy.yml` lives in the *calling* repo, so the checkout of the caller repo (default `actions/checkout`) is needed too.
+Copy job logic. Replace `github.event.*` references with `inputs.*`. The issue-comment path must carry enough forwarded metadata to preserve the original authorization and idempotency behavior: at minimum `comment_id`, `comment_user_login`, and `repository_owner`. Script checkout for `healing-control.sh` and `check-autonomy-policy.sh`. Note: `autonomy-policy.yml` lives in the *calling* repo, so the checkout of the caller repo (default `actions/checkout`) is needed too.
 
 **Step 3: Handle the dual-checkout pattern**
 

@@ -39,7 +39,7 @@ permissions:
 # Collapse rapid issue creation (e.g., decomposer burst) to one dispatch.
 concurrency:
   group: "pipeline-dispatch-${{ inputs.issue_number }}"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   dispatch:

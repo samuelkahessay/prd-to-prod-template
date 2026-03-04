@@ -44,10 +44,20 @@ on:
         type: string
         required: false
         default: ""
+      comment_id:
+        type: number
+        required: false
+        default: 0
+        description: "github.event.comment.id from caller"
       comment_user_login:
         type: string
         required: false
         default: ""
+      repository_owner:
+        type: string
+        required: false
+        default: ""
+        description: "github.repository_owner from caller"
       issue_number:
         type: number
         required: false
@@ -96,8 +106,14 @@ jobs:
     if: |
       inputs.event_name == 'issue_comment' &&
       inputs.is_pull_request &&
+      inputs.comment_id != 0 &&
       startsWith(inputs.comment_body, '[PIPELINE-VERDICT]') &&
-      contains(inputs.comment_body, 'gh-aw-agentic-workflow: Pipeline Review Agent')
+      contains(inputs.comment_body, 'gh-aw-agentic-workflow: Pipeline Review Agent') &&
+      inputs.comment_user_login != '' &&
+      (
+        (inputs.repository_owner != '' && inputs.comment_user_login == inputs.repository_owner) ||
+        (inputs.repository_owner == '' && inputs.comment_user_login == github.repository_owner)
+      )
 
     concurrency:
       group: "pr-review-submit-${{ inputs.issue_number }}"
@@ -145,7 +161,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.issue_number }}
           REPO: ${{ github.repository }}
-          COMMENT_ID: ${{ github.event.comment.id }}
+          COMMENT_ID: ${{ inputs.comment_id }}
         run: |
           HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq '.headRefOid')
           echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
@@ -175,7 +191,7 @@ jobs:
         id: review
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMENT_ID: ${{ github.event.comment.id }}
+          COMMENT_ID: ${{ inputs.comment_id }}
           PR_NUMBER: ${{ inputs.issue_number }}
           REPO: ${{ github.repository }}
         run: |
@@ -1026,7 +1042,12 @@ jobs:
     if: |
       inputs.event_name == 'issue_comment' &&
       inputs.is_pull_request &&
-      startsWith(inputs.comment_body, '/approve-sensitive')
+      startsWith(inputs.comment_body, '/approve-sensitive') &&
+      inputs.comment_user_login != '' &&
+      (
+        (inputs.repository_owner != '' && inputs.comment_user_login == inputs.repository_owner) ||
+        (inputs.repository_owner == '' && inputs.comment_user_login == github.repository_owner)
+      )
 
     concurrency:
       group: "pr-review-submit-${{ inputs.issue_number }}"
