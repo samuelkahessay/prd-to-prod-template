@@ -10,7 +10,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 
 export default function SettingsPage() {
   return (
-    <div className="container mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+    <div className="page-fade-in container mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
       <div className="flex items-center gap-4">
         <Link 
           href="/"

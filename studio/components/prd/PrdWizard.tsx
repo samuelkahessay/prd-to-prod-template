@@ -69,7 +69,7 @@ export function PrdWizard({ onComplete }: PrdWizardProps) {
   }, []);
 
   return (
-    <div data-testid="prd-wizard" className="mx-auto w-full max-w-[720px] space-y-8 px-4 sm:px-6">
+    <div data-testid="prd-wizard" className="page-fade-in mx-auto w-full max-w-[720px] space-y-8 px-4 sm:px-6">
       <div className="flex items-center justify-center gap-2 overflow-x-auto pb-1">
         {STEPS.map((step, index) => (
           <div key={step.label} className="flex items-center gap-2">
