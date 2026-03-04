@@ -135,6 +135,6 @@ describe('GET /api/pipeline/issues', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(500);
-    expect(payload.error).toContain('Failed to fetch issues');
+    expect(payload.error).toContain('Internal server error');
   });
 });

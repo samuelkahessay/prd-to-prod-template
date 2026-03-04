@@ -92,10 +92,33 @@ export async function GET(request: Request) {
         },
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to fetch pipeline PRs:', error);
+    
+    // Check Octokit error status
+    if (error.status === 404) {
+      return NextResponse.json(
+        { error: 'Repository not found' },
+        { status: 404 }
+      );
+    }
+    
+    if (error.status === 403) {
+      return NextResponse.json(
+        { error: 'Access forbidden - check token permissions' },
+        { status: 403 }
+      );
+    }
+    
+    if (error.status === 400) {
+      return NextResponse.json(
+        { error: 'Invalid request parameters' },
+        { status: 400 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to fetch PRs from GitHub' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
