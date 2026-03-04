@@ -5,7 +5,7 @@ vi.mock('@/lib/auth/provider', () => ({
 }));
 
 vi.mock('@/lib/github/client', () => ({
-  createOctokit: vi.fn(),
+  createGitHubClient: vi.fn(),
 }));
 
 vi.mock('@/lib/github/comments', () => ({
@@ -14,11 +14,11 @@ vi.mock('@/lib/github/comments', () => ({
 
 import { resolveAuthToken } from '@/lib/auth/provider';
 import { postSlashCommand } from '@/lib/actions/slash-commands';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import { postComment } from '@/lib/github/comments';
 
 const mockedResolveAuthToken = vi.mocked(resolveAuthToken);
-const mockedCreateOctokit = vi.mocked(createOctokit);
+const mockedCreateOctokit = vi.mocked(createGitHubClient);
 const mockedPostComment = vi.mocked(postComment);
 
 describe('actions/slash-commands', () => {

@@ -1,5 +1,5 @@
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import {
   addLabel as addIssueLabel,
   closeIssue as closeGitHubIssue,
@@ -24,7 +24,7 @@ function getAuthedClient() {
     throw new Error('No GitHub authentication token found');
   }
 
-  return createOctokit(authResult.token);
+  return createGitHubClient(authResult.token);
 }
 
 export async function closeIssue(

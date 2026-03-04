@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import { listDirectory, readFile } from '@/lib/github/contents';
 import type { ShowcaseEntry } from '@/lib/pipeline/types';
 
@@ -65,7 +65,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const client = createOctokit(authResult.token);
+    const client = createGitHubClient(authResult.token);
 
     let showcaseItems;
     try {

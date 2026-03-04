@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import { listPipelineIssues } from '@/lib/github/issues';
 import type { PipelineIssue } from '@/lib/pipeline/types';
 
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const client = createOctokit(authResult.token);
+    const client = createGitHubClient(authResult.token);
     const rawIssues = await listPipelineIssues({
       client,
       owner,

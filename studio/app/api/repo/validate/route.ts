@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const client = createOctokit(authResult.token);
+    const client = createGitHubClient(authResult.token);
 
     const workflowChecks = await Promise.allSettled(
       REQUIRED_WORKFLOW_FILES.map(async file => {

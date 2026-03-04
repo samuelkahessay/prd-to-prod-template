@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { GET } from '@/app/api/showcase/route';
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import { listDirectory, readFile } from '@/lib/github/contents';
 
 vi.mock('@/lib/auth/provider');
@@ -9,7 +9,7 @@ vi.mock('@/lib/github/client');
 vi.mock('@/lib/github/contents');
 
 const mockResolveAuthToken = resolveAuthToken as Mock;
-const mockCreateOctokit = createOctokit as Mock;
+const mockCreateOctokit = createGitHubClient as Mock;
 const mockListDirectory = listDirectory as Mock;
 const mockReadFile = readFile as Mock;
 

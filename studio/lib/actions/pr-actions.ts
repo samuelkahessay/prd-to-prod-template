@@ -1,5 +1,5 @@
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import {
   approvePR as approvePullRequest,
   mergePR as mergePullRequest,
@@ -25,7 +25,7 @@ function getAuthedClient() {
     throw new Error('No GitHub authentication token found');
   }
 
-  return createOctokit(authResult.token);
+  return createGitHubClient(authResult.token);
 }
 
 export async function approvePR(

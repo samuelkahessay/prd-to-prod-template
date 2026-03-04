@@ -5,15 +5,15 @@ vi.mock('@/lib/auth/provider', () => ({
 }));
 
 vi.mock('@/lib/github/client', () => ({
-  createOctokit: vi.fn(),
+  createGitHubClient: vi.fn(),
 }));
 
 import { POST } from '@/app/api/repo/validate/route';
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 
 const mockedResolveAuthToken = vi.mocked(resolveAuthToken);
-const mockedCreateOctokit = vi.mocked(createOctokit);
+const mockedCreateOctokit = vi.mocked(createGitHubClient);
 
 describe('POST /api/repo/validate', () => {
   beforeEach(() => {

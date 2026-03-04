@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import {
   getDeploymentStatuses,
   listDeployments,
@@ -17,7 +17,7 @@ async function transformDeployment(
     created_at: string;
     updated_at: string;
   },
-  client: ReturnType<typeof createOctokit>,
+  client: ReturnType<typeof createGitHubClient>,
   owner: string,
   repo: string
 ): Promise<PipelineDeployment> {
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const client = createOctokit(authResult.token);
+    const client = createGitHubClient(authResult.token);
     const rawDeployments = await listDeployments({
       client,
       owner,

@@ -5,7 +5,7 @@ vi.mock('@/lib/auth/provider', () => ({
 }));
 
 vi.mock('@/lib/github/client', () => ({
-  createOctokit: vi.fn(),
+  createGitHubClient: vi.fn(),
 }));
 
 vi.mock('@/lib/github/issues', () => ({
@@ -20,7 +20,7 @@ import {
   closeIssue,
   removeLabel,
 } from '@/lib/actions/issue-actions';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import {
   addLabel as addGitHubLabel,
   closeIssue as closeGitHubIssue,
@@ -28,7 +28,7 @@ import {
 } from '@/lib/github/issues';
 
 const mockedResolveAuthToken = vi.mocked(resolveAuthToken);
-const mockedCreateOctokit = vi.mocked(createOctokit);
+const mockedCreateOctokit = vi.mocked(createGitHubClient);
 const mockedAddGitHubLabel = vi.mocked(addGitHubLabel);
 const mockedCloseGitHubIssue = vi.mocked(closeGitHubIssue);
 const mockedRemoveGitHubLabel = vi.mocked(removeGitHubLabel);

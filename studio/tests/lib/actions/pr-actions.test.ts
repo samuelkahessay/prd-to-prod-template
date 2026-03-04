@@ -5,7 +5,7 @@ vi.mock('@/lib/auth/provider', () => ({
 }));
 
 vi.mock('@/lib/github/client', () => ({
-  createOctokit: vi.fn(),
+  createGitHubClient: vi.fn(),
 }));
 
 vi.mock('@/lib/github/pulls', () => ({
@@ -20,14 +20,14 @@ import {
   mergePR,
   requestChangesPR,
 } from '@/lib/actions/pr-actions';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import {
   approvePR as approveGitHubPR,
   mergePR as mergeGitHubPR,
 } from '@/lib/github/pulls';
 
 const mockedResolveAuthToken = vi.mocked(resolveAuthToken);
-const mockedCreateOctokit = vi.mocked(createOctokit);
+const mockedCreateOctokit = vi.mocked(createGitHubClient);
 const mockedApproveGitHubPR = vi.mocked(approveGitHubPR);
 const mockedMergeGitHubPR = vi.mocked(mergeGitHubPR);
 

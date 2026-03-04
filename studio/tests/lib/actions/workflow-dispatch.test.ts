@@ -5,7 +5,7 @@ vi.mock('@/lib/auth/provider', () => ({
 }));
 
 vi.mock('@/lib/github/client', () => ({
-  createOctokit: vi.fn(),
+  createGitHubClient: vi.fn(),
 }));
 
 vi.mock('@/lib/github/workflows', () => ({
@@ -19,14 +19,14 @@ import {
   dispatchWorkflow,
   reRunWorkflow,
 } from '@/lib/actions/workflow-dispatch';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import {
   cancelWorkflowRun,
   dispatchWorkflow as dispatchGitHubWorkflow,
 } from '@/lib/github/workflows';
 
 const mockedResolveAuthToken = vi.mocked(resolveAuthToken);
-const mockedCreateOctokit = vi.mocked(createOctokit);
+const mockedCreateOctokit = vi.mocked(createGitHubClient);
 const mockedDispatchGitHubWorkflow = vi.mocked(dispatchGitHubWorkflow);
 const mockedCancelWorkflowRun = vi.mocked(cancelWorkflowRun);
 

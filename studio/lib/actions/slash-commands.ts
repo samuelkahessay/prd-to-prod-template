@@ -1,5 +1,5 @@
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import { postComment } from '@/lib/github/comments';
 
 export const SLASH_COMMANDS = [
@@ -47,7 +47,7 @@ export async function postSlashCommand(
     throw new Error('No GitHub authentication token found');
   }
 
-  const client = createOctokit(authResult.token);
+  const client = createGitHubClient(authResult.token);
 
   try {
     await postComment({

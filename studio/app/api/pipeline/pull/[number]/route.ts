@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import { getPR, getPRReviews } from '@/lib/github/pulls';
 import type { PipelinePR, ReviewStatus } from '@/lib/pipeline/types';
 
@@ -100,7 +100,7 @@ export async function GET(
   }
 
   try {
-    const client = createOctokit(authResult.token);
+    const client = createGitHubClient(authResult.token);
     
     const rawPR = await getPR({
       client,

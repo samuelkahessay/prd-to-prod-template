@@ -1,6 +1,6 @@
 import { Octokit } from '@octokit/rest';
 
-export function createOctokit(token: string): Octokit {
+export function createGitHubClient(token: string): Octokit {
   const trimmedToken = token.trim();
 
   if (!trimmedToken) {

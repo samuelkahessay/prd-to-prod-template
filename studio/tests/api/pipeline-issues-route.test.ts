@@ -5,7 +5,7 @@ vi.mock('@/lib/auth/provider', () => ({
 }));
 
 vi.mock('@/lib/github/client', () => ({
-  createOctokit: vi.fn(),
+  createGitHubClient: vi.fn(),
 }));
 
 vi.mock('@/lib/github/issues', () => ({
@@ -14,11 +14,11 @@ vi.mock('@/lib/github/issues', () => ({
 
 import { GET } from '@/app/api/pipeline/issues/route';
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import { listPipelineIssues } from '@/lib/github/issues';
 
 const mockedResolveAuthToken = vi.mocked(resolveAuthToken);
-const mockedCreateOctokit = vi.mocked(createOctokit);
+const mockedCreateOctokit = vi.mocked(createGitHubClient);
 const mockedListPipelineIssues = vi.mocked(listPipelineIssues);
 
 describe('GET /api/pipeline/issues', () => {

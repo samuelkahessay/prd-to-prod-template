@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { resolveAuthToken } from '@/lib/auth/provider';
-import { createOctokit } from '@/lib/github/client';
+import { createGitHubClient } from '@/lib/github/client';
 import { listWorkflowRuns } from '@/lib/github/workflows';
 import type { PipelineWorkflowRun } from '@/lib/pipeline/types';
 
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const client = createOctokit(authResult.token);
+    const client = createGitHubClient(authResult.token);
     const result = await listWorkflowRuns({
       client,
       owner,
