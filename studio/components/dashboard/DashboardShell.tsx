@@ -87,23 +87,11 @@ function DashboardShellContent() {
 
   const overviewQuery = usePipelineOverview(owner, repo);
 
-  if (!currentRepo) {
-    return <WelcomeScreen showcaseEntries={[]} owner="" repo="" />;
-  }
-
-  if (overviewQuery.error) {
-    throw overviewQuery.error;
-  }
-
   const overview = overviewQuery.data;
   const issues = overview?.issues ?? [];
   const prs = overview?.pull_requests ?? [];
   const workflows = overview?.workflows ?? [];
   const deployments = overview?.deployments ?? [];
-
-  if (!overviewQuery.isLoading && issues.length === 0) {
-    return <WelcomeScreen showcaseEntries={[]} owner={currentRepo.owner} repo={currentRepo.repo} />;
-  }
 
   const metrics = useMemo(
     () => computePipelineMetrics(issues, prs, workflows, deployments),
@@ -114,6 +102,18 @@ function DashboardShellContent() {
     () => buildEventTimeline(issues, prs, workflows, deployments),
     [deployments, issues, prs, workflows]
   );
+
+  if (!currentRepo) {
+    return <WelcomeScreen showcaseEntries={[]} owner="" repo="" />;
+  }
+
+  if (overviewQuery.error) {
+    throw overviewQuery.error;
+  }
+
+  if (!overviewQuery.isLoading && issues.length === 0) {
+    return <WelcomeScreen showcaseEntries={[]} owner={currentRepo.owner} repo={currentRepo.repo} />;
+  }
 
   return (
     <div className="page-fade-in space-y-6" data-testid="dashboard-shell">
