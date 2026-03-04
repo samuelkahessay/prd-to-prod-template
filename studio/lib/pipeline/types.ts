@@ -108,6 +108,7 @@ export type PipelineEvent =
       changes: Partial<PipelineIssue>;
       timestamp: string;
     }
+  | { type: 'issue_closed'; issue: PipelineIssue; timestamp: string }
   | { type: 'pr_created'; pr: PipelinePR; timestamp: string }
   | {
       type: 'pr_updated';
@@ -115,6 +116,7 @@ export type PipelineEvent =
       changes: Partial<PipelinePR>;
       timestamp: string;
     }
+  | { type: 'pr_merged'; pr: PipelinePR; timestamp: string }
   | { type: 'workflow_started'; workflow: PipelineWorkflowRun; timestamp: string }
   | {
       type: 'workflow_completed';

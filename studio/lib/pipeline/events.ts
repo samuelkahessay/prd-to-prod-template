@@ -68,6 +68,15 @@ export function buildEventTimeline(
       timestamp: issue.created_at,
       _order: order++,
     });
+
+    if (issue.state === 'closed') {
+      events.push({
+        type: "issue_closed",
+        issue,
+        timestamp: issue.updated_at,
+        _order: order++,
+      });
+    }
   }
 
   for (const pr of prs) {
@@ -77,6 +86,15 @@ export function buildEventTimeline(
       timestamp: inferPRTimestamp(pr, issues, workflows),
       _order: order++,
     });
+
+    if (pr.state === 'merged') {
+      events.push({
+        type: "pr_merged",
+        pr,
+        timestamp: inferPRTimestamp(pr, issues, workflows),
+        _order: order++,
+      });
+    }
   }
 
   for (const workflow of workflows) {

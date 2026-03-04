@@ -62,6 +62,74 @@ describe("buildEventTimeline", () => {
     });
   });
 
+  it("creates issue_closed events for closed issues", () => {
+    const issues: PipelineIssue[] = [
+      {
+        id: "1",
+        number: 42,
+        title: "Implement feature",
+        state: "closed",
+        labels: ["feature"],
+        dependencies: [],
+        assignee: "bot",
+        created_at: "2026-03-03T10:00:00Z",
+        updated_at: "2026-03-03T11:00:00Z",
+      },
+    ];
+
+    const result = buildEventTimeline(issues, [], [], []);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      type: "issue_closed",
+      issue: issues[0],
+      timestamp: "2026-03-03T11:00:00Z",
+    });
+    expect(result[1]).toMatchObject({
+      type: "issue_created",
+      issue: issues[0],
+      timestamp: "2026-03-03T10:00:00Z",
+    });
+  });
+
+  it("creates pr_merged events for merged pull requests", () => {
+    const issues: PipelineIssue[] = [
+      {
+        id: "1",
+        number: 42,
+        title: "Implement feature",
+        state: "open",
+        labels: ["feature"],
+        dependencies: [],
+        assignee: "bot",
+        created_at: "2026-03-03T10:00:00Z",
+        updated_at: "2026-03-03T10:00:00Z",
+      },
+    ];
+
+    const prs: PipelinePR[] = [
+      {
+        id: "1",
+        number: 10,
+        title: "Add login page",
+        state: "merged",
+        linked_issue: 42,
+        reviews: [],
+        checks: [],
+        mergeable: true,
+        auto_merge: false,
+      },
+    ];
+
+    const result = buildEventTimeline(issues, prs, [], []);
+
+    expect(result).toHaveLength(3);
+    const types = result.map((e) => e.type);
+    expect(types).toContain("issue_created");
+    expect(types).toContain("pr_created");
+    expect(types).toContain("pr_merged");
+  });
+
   it("creates workflow_started and workflow_completed events", () => {
     const workflows: PipelineWorkflowRun[] = [
       {
