@@ -198,6 +198,7 @@ Enhancement runs are allowed. A new PRD may evolve the current application in pl
 - `docs/prd/` — PRD input records (kept forever)
 - `docs/ARCHITECTURE.md` — Pipeline architecture documentation
 - `showcase/` — Completed run summaries with links to git tags
+- `studio/` — prd-to-prod Studio dashboard application
 - `AGENTS.md` — This file (reset to defaults between runs)
 - `README.md`, `LICENSE`, `.gitignore`
 
