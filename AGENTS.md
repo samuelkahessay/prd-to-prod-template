@@ -48,6 +48,7 @@ Enhancement runs are allowed. A new PRD may evolve the current application in pl
 - `docs/prd/` — PRD input records (kept forever)
 - `docs/ARCHITECTURE.md` — Pipeline architecture documentation
 - `showcase/` — Completed run summaries with links to git tags
+- `studio/` — prd-to-prod Studio dashboard application
 - `AGENTS.md` — This file (reset to defaults between runs)
 - `README.md`, `LICENSE`, `.gitignore`
 
@@ -56,3 +57,11 @@ Enhancement runs are allowed. A new PRD may evolve the current application in pl
 - `package.json`, `tsconfig.json`, `Dockerfile`, `global.json`, etc. — PRD-specific configs
 - `docs/plans/` — Design documents for the active PRD
 - `node_modules/`, `.next/`, `dist/`, `drills/reports/*.json` — Build and generated artifacts
+
+## Studio (prd-to-prod Studio)
+
+A Next.js dashboard application for monitoring the prd-to-prod pipeline. This is permanent infrastructure that displays pipeline status, progress, and run history. It survives archive cycles.
+
+### Build & Test
+- Build: `cd studio && npm run build`
+- Test: `cd studio && npm test`

@@ -1,0 +1,33 @@
+name: Studio CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - studio/**
+  push:
+    branches: [main]
+    paths:
+      - studio/**
+
+permissions:
+  contents: read
+
+jobs:
+  studio-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/cache@v4
+        with:
+          path: studio/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('studio/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - run: cd studio && npm ci
+      - run: cd studio && npm run lint
+      - run: cd studio && npm test
+      - run: cd studio && npm run build

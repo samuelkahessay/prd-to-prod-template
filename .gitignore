@@ -35,3 +35,9 @@ obj/
 
 # Drill reports (generated, not committed)
 drills/reports/*.json
+
+# Studio build and test artifacts
+studio/node_modules/
+studio/.next/
+studio/test-results/
+studio/playwright-report/
