@@ -26,7 +26,7 @@ describe("IssueNode", () => {
             nodeType: "issue-node",
             onClick,
           },
-        } as any)}
+        } as unknown as React.ComponentProps<typeof IssueNode>)}
       />
     );
 

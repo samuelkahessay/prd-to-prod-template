@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildEventTimeline } from "@/lib/pipeline/events";
 import type {
+  PipelineEvent,
   PipelineIssue,
   PipelinePR,
   PipelineWorkflowRun,
@@ -148,8 +149,8 @@ describe("buildEventTimeline", () => {
     expect(result).toHaveLength(2);
     expect(result[0].type).toBe("workflow_completed");
     expect(result[1].type).toBe("workflow_started");
-    expect((result[0] as any).workflow).toEqual(workflows[0]);
-    expect((result[1] as any).workflow).toEqual(workflows[0]);
+    expect((result[0] as Extract<PipelineEvent, { type: "workflow_completed" }>).workflow).toEqual(workflows[0]);
+    expect((result[1] as Extract<PipelineEvent, { type: "workflow_started" }>).workflow).toEqual(workflows[0]);
   });
 
   it("creates deployment_started and deployment_completed events for completed deployments", () => {

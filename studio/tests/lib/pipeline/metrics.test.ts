@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  computePipelineMetrics,
-  type PipelineMetrics,
-} from '@/lib/pipeline/metrics';
+import { computePipelineMetrics } from '@/lib/pipeline/metrics';
 import type {
   PipelineIssue,
   PipelinePR,

@@ -29,38 +29,52 @@ This template was extracted from the source `prd-to-prod` repository. When synci
 
 ## Landing page
 
-**Stack**: Next.js 16 (App Router), CSS Modules, GSAP, Canvas API, Vercel
+**Stack**: Next.js 16 (App Router), Tailwind CSS, CSS Modules, Vercel
 **Live**: `https://<your-project>.vercel.app` (replace with your actual deployment URL)
-**Design doc**: `docs/plans/2026-03-03-landing-page-design.md`
+**Design docs**: `docs/plans/2026-03-03-landing-page-design.md`, `docs/plans/2026-03-04-landing-page-handoff.md`
+
+### Architecture — route groups
+
+| Route group | URL | Layout |
+|---|---|---|
+| `(marketing)` | `/` | Clean, no sidebar/topbar. Only `ThemeProvider`. |
+| `(dashboard)` | `/dashboard`, `/prd/new`, `/settings` | Full `AppShell` with sidebar, topbar, `QueryClientProvider`, `RepoProvider`. |
+
+Root `studio/app/layout.tsx` wraps `ThemeProvider` + fonts only. Dashboard providers live in `studio/app/(dashboard)/layout.tsx`.
 
 ### Key files
-- `src/app/layout.tsx` — Root layout, Inter + Instrument Serif fonts via `next/font/google`
-- `src/app/globals.css` — Design tokens (pure monochrome: `--bg`, `--surface`, `--border`, `--text`, `--text-secondary`, `--text-muted`)
-- `src/app/page.tsx` — Main page assembly (server component)
-- `src/components/HeroCanvas.tsx` — Flowing bezier curves with spring physics (ported from WS-Demo)
-- `src/components/PipelineCanvas.tsx` — Node-and-path pipeline visualization with particle flow
-- `src/components/MagneticCursor.tsx` — GSAP dot+ring cursor (desktop only, `mix-blend-mode: difference`)
-- `src/components/ScrollReveal.tsx` — IntersectionObserver wrapper for staggered fade-in
-- `src/components/StatsBar.tsx` — Async server component, ISR revalidate 3600s, fetches GitHub API
-- `src/lib/github.ts` — GitHub REST API helpers for stats
+- `studio/app/layout.tsx` — Root layout, Inter + Instrument Serif fonts
+- `studio/app/globals.css` — Design tokens including stage color tokens (oklch, light + dark)
+- `studio/app/(marketing)/page.tsx` — Landing page assembly (server component)
+- `studio/app/(dashboard)/layout.tsx` — Dashboard layout with AppShell + providers
+- `studio/components/marketing/MarketingNav.tsx` — Sticky nav, backdrop blur on scroll, theme toggle
+- `studio/components/marketing/Hero.tsx` — Headline, proof badges, dual CTAs
+- `studio/components/marketing/PipelineWalkthrough.tsx` — Scroll-linked sticky SVG (desktop) + accordion (mobile) + auto-play
+- `studio/components/marketing/PipelineDiagram.tsx` — SVG pipeline diagram with 7 stage nodes
+- `studio/components/marketing/StagePanel.tsx` — Stage description + mock view wrapper
+- `studio/components/marketing/stages/` — 7 mock stage views (PrdStage, DecomposeStage, etc.)
+- `studio/components/marketing/TrustSection.tsx` — autonomy-policy.yml code block + trust principles
+- `studio/components/marketing/AudienceCards.tsx` — 3-column value props
+- `studio/components/marketing/StatsSection.tsx` — Async server component, ISR revalidate 1h
+- `studio/components/marketing/GetStarted.tsx` — Terminal code block + CTAs
+- `studio/components/marketing/ScrollReveal.tsx` — IntersectionObserver, `prefers-reduced-motion` support
 
 ### Design language
-- **Palette**: Pure monochrome. No accent color. `#000` bg, `#0a0a0a` surface, `#1a1a1a` borders, white text
+- **Palette**: Light + dark mode via `next-themes`. Stage color tokens in oklch (`--stage-prd` through `--stage-heal` + `-muted` variants)
 - **Typography**: Instrument Serif (headlines), Inter 300 (body), monospace (labels/code)
-- **Layout**: 860px max-width content column, 1px border grid between sections, no border-radius
-- **Interactions**: Magnetic cursor, scroll reveal, spring-physics canvas animations, mouse repulsion
-- **Aesthetic**: Cold brutalist. Inspired by dark minimal design + narrative scroll + canvas
+- **Layout**: Hybrid scroll-storytelling. Sticky pipeline diagram on desktop, accordion on mobile
+- **Interactions**: Scroll-linked stage highlighting, auto-play walkthrough, backdrop blur nav
+- **Aesthetic**: Clean, product-focused. Stage-colored accents on dark/light surfaces
 
-### Pipeline visualization (PipelineCanvas.tsx)
-8 nodes representing real agents with 3 flow paths:
-- **Main flow**: PRD → Decompose → Implement → Review → Merge → Deploy
-- **Review rejection**: Review → Implement (22% probability, dashed arc)
-- **Self-healing**: Deploy → Detect → Repair → Review (18% probability, lower arc)
-- Particles use spring physics (spring 0.06, damping 0.78) and follow bezier paths between nodes
-- Node glow pulses on particle arrival, mouse repulsion pushes particles away
+### Pipeline walkthrough (PipelineWalkthrough.tsx)
+7 stages with scroll-linked progression:
+- **PRD** → **Decompose** → **Implement** → **Review** → **Merge** → **Deploy** → **Self-Heal**
+- Desktop: sticky SVG diagram on left, scrolling stage panels on right
+- Mobile: accordion with tap-to-expand stages
+- "Watch the flow" auto-play scrolls through all stages
 
 ### Vercel deployment
-- `deploy-router.yml` → `deploy-vercel.yml` on push to main
+- `deploy-router.yml` → `deploy-vercel.yml` on push to main (working-directory: `studio`)
 - **Custom alias gotcha**: `<your-project>.vercel.app` is a manual alias. Workflow deploys go to `<your-project>-template.vercel.app` automatically but do NOT update the custom alias. After workflow deploys, re-alias with: `npx vercel alias <deployment-url> <your-project>.vercel.app`
 - Secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID` (`YOUR_VERCEL_TEAM_ID`), `VERCEL_PROJECT_ID` (`YOUR_VERCEL_PROJECT_ID`)
 
@@ -113,13 +127,14 @@ Background processes: pipeline-watchdog (30-min cron), auto-dispatch-requeue, pi
 3. **Phase 2.5** (2026-03-03): Architecture planning pipeline sync
 4. **Phase 3** (2026-03-03): GitHub App auth — dual auth (App + PAT fallback) in 6 workflows
 5. **Phase 4** (2026-03-03): Landing page — Next.js, monochrome brutalist, canvas animations, ISR stats
+6. **Phase 4.5** (2026-03-04): Landing page redesign — Hybrid scroll-storytelling, route groups, 7 stage mock views, light/dark mode, accordion mobile layout
 
 ## What's next (polish and improve)
 
-- Landing page visual polish (canvas tuning, responsive testing, favicon, OG image)
-- MetaSection: fill in real issue/PR numbers once pipeline builds something on this repo
-- StatsBar: numbers are currently low (0 PRs merged, 0 deploys) — will grow as pipeline does work
+- StatsSection: returns null until pipeline generates data (PRs merged with `pipeline` label)
+- Stage mock views use hardcoded sample data — could be wired to live API later
 - Consider adding a video/GIF of the pipeline in action
+- Favicon and OG image for landing page
 - Phase 5 (deferred): Drill kit for template users
 - Phase 6 (deferred): dotnet-azure and docker-generic stack re-addition
 

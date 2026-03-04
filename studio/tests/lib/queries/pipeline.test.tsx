@@ -50,7 +50,7 @@ describe('usePipelineIssues', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => ({ issues: mockIssues, rateLimitRemaining: 5000 }),
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
@@ -79,7 +79,7 @@ describe('usePipelineIssues', () => {
   });
 
   it('handles fetch errors', async () => {
-    (global.fetch as any).mockRejectedValue(new Error('Network error'));
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(
       () => usePipelineIssues('test-owner', 'test-repo'),
@@ -116,7 +116,7 @@ describe('usePipelinePRs', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => ({ pull_requests: mockPRs, rateLimitRemaining: 5000 }),
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
@@ -163,7 +163,7 @@ describe('usePipelineWorkflows', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => ({ workflows: mockWorkflows, rateLimitRemaining: 5000 }),
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
@@ -200,7 +200,7 @@ describe('usePipelineDeployments', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => ({ deployments: mockDeployments, rateLimitRemaining: 5000 }),
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
@@ -235,7 +235,7 @@ describe('usePipelineOverview', () => {
       rateLimitRemaining: 5000,
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockOverview,
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
@@ -285,7 +285,7 @@ describe('useIssueDetail', () => {
       rateLimitRemaining: 5000,
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockDetail,
       headers: new Map([['X-RateLimit-Remaining', '5000']]),
@@ -344,7 +344,7 @@ describe('usePRDetail', () => {
       rateLimitRemaining: 5000,
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockDetail,
       headers: new Map([['X-RateLimit-Remaining', '5000']]),

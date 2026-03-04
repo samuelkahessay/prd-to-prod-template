@@ -27,7 +27,7 @@ describe("DeployNode", () => {
             environment: "production",
             onClick,
           },
-        } as any)}
+        } as unknown as React.ComponentProps<typeof DeployNode>)}
       />
     );
 

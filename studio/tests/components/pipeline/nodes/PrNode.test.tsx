@@ -27,7 +27,7 @@ describe("PrNode", () => {
             reviewStatus: "Approved",
             onClick,
           },
-        } as any)}
+        } as unknown as React.ComponentProps<typeof PrNode>)}
       />
     );
 

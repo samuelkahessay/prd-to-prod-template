@@ -39,7 +39,7 @@ describe('useAuthStatus', () => {
       warnings: [],
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockAuthStatus,
     });
@@ -63,7 +63,7 @@ describe('useAuthStatus', () => {
       warnings: ['No GitHub token found'],
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockAuthStatus,
     });
@@ -79,7 +79,7 @@ describe('useAuthStatus', () => {
   });
 
   it('handles fetch errors', async () => {
-    (global.fetch as any).mockRejectedValue(new Error('Network error'));
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useAuthStatus(), {
       wrapper: createWrapper(),
@@ -102,7 +102,7 @@ describe('useAuthStatus', () => {
       warnings: [],
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockAuthStatus,
     });

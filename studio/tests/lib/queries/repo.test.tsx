@@ -34,7 +34,7 @@ describe('useRepoValidation', () => {
       hasWorkflows: true,
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockValidation,
     });
@@ -66,7 +66,7 @@ describe('useRepoValidation', () => {
       hasWorkflows: true,
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockValidation,
     });
@@ -93,7 +93,7 @@ describe('useRepoValidation', () => {
   });
 
   it('handles fetch errors', async () => {
-    (global.fetch as any).mockRejectedValue(new Error('Network error'));
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(
       () => useRepoValidation('test-owner', 'test-repo'),
@@ -112,7 +112,7 @@ describe('useRepoValidation', () => {
       hasWorkflows: true,
     };
 
-    (global.fetch as any).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: async () => mockValidation,
     });

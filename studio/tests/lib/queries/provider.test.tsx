@@ -42,28 +42,23 @@ describe('QueryClientProvider', () => {
   });
 
   it('creates a new client instance per provider', () => {
-    let client1: QueryClient | null = null;
-    let client2: QueryClient | null = null;
-
-    function TestComponent1() {
-      client1 = useQueryClient();
+    function TestComponent({ onClient }: { onClient: (c: QueryClient) => void }) {
+      onClient(useQueryClient());
       return null;
     }
 
-    function TestComponent2() {
-      client2 = useQueryClient();
-      return null;
-    }
+    let client1: QueryClient | undefined;
+    let client2: QueryClient | undefined;
 
     const { unmount: unmount1 } = render(
       <QueryClientProvider>
-        <TestComponent1 />
+        <TestComponent onClient={(c) => { client1 = c; }} />
       </QueryClientProvider>
     );
 
     const { unmount: unmount2 } = render(
       <QueryClientProvider>
-        <TestComponent2 />
+        <TestComponent onClient={(c) => { client2 = c; }} />
       </QueryClientProvider>
     );
 

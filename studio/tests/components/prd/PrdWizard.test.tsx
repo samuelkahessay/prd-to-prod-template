@@ -150,7 +150,7 @@ describe("PrdWizard", () => {
 
     await advanceToStep3(user);
 
-    let nextButton = screen.getByRole("button", { name: /next/i });
+    const nextButton = screen.getByRole("button", { name: /next/i });
     await user.click(nextButton);
 
     await waitFor(() => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import SettingsPage from '@/app/settings/page';
+import SettingsPage from '@/app/(dashboard)/settings/page';
 import { getSettings, updateSettings, addRecentRepo } from '@/lib/settings/storage';
 
 const mockRepoContext = {

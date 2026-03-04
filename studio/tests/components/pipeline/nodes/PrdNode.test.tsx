@@ -29,7 +29,7 @@ describe("PrdNode", () => {
       },
     } as unknown as PipelineFlowNode;
 
-    render(<PrdNode {...({ id: node.id, data: node.data } as any)} />);
+    render(<PrdNode {...({ id: node.id, data: node.data } as unknown as React.ComponentProps<typeof PrdNode>)} />);
 
     expect(screen.getByTestId("pipeline-node-prd")).toHaveTextContent("PRD Root");
     await user.click(screen.getByRole("button"));
