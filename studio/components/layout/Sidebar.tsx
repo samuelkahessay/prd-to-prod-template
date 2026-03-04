@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { LayoutDashboard, FileText, Settings, Activity } from "lucide-react";
+import { RepoPicker } from "@/components/repo/RepoPicker";
+import { RepoStatusBadge } from "@/components/repo/RepoStatusBadge";
 
 export function Sidebar() {
   return (
@@ -15,6 +19,13 @@ export function Sidebar() {
       </div>
       
       <div className="flex-1 overflow-auto py-4">
+        <div className="mb-4 px-4">
+          <RepoPicker />
+          <div className="mt-2">
+            <RepoStatusBadge />
+          </div>
+        </div>
+
         <nav className="grid gap-1 px-4 text-sm font-medium">
           <Link 
             href="/" 

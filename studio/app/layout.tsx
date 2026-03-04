@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { AppShell } from "@/components/layout/AppShell";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { RepoProvider } from "@/lib/repo/context";
 
 export default function RootLayout({
   children,
@@ -37,11 +38,13 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <TooltipProvider>
-            <AppShell>
-              {children}
-            </AppShell>
-          </TooltipProvider>
+          <RepoProvider>
+            <TooltipProvider>
+              <AppShell>
+                {children}
+              </AppShell>
+            </TooltipProvider>
+          </RepoProvider>
         </ThemeProvider>
       </body>
     </html>
