@@ -56,7 +56,7 @@ export function buildEventTimeline(
   prs: PipelinePR[],
   workflows: PipelineWorkflowRun[],
   deployments: PipelineDeployment[],
-  comments?: any[]
+  _comments?: unknown[]
 ): PipelineEvent[] {
   const events: EventWithOrder[] = [];
   let order = 0;
