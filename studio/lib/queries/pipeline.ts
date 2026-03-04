@@ -54,6 +54,7 @@ export function usePipelineIssues(owner: string | null, repo: string | null) {
       return response;
     },
     enabled: Boolean(owner && repo),
+    staleTime: 5000,
     refetchInterval: (query) => {
       const rateLimitRemaining = query.state.data?.rateLimitRemaining;
       return shouldReducePolling(rateLimitRemaining)
@@ -79,6 +80,7 @@ export function usePipelinePRs(owner: string | null, repo: string | null) {
       return response;
     },
     enabled: Boolean(owner && repo),
+    staleTime: 5000,
     refetchInterval: (query) => {
       const rateLimitRemaining = query.state.data?.rateLimitRemaining;
       return shouldReducePolling(rateLimitRemaining)
@@ -104,6 +106,7 @@ export function usePipelineWorkflows(owner: string | null, repo: string | null) 
       return response;
     },
     enabled: Boolean(owner && repo),
+    staleTime: 5000,
     refetchInterval: (query) => {
       const rateLimitRemaining = query.state.data?.rateLimitRemaining;
       return shouldReducePolling(rateLimitRemaining)
@@ -129,6 +132,7 @@ export function usePipelineDeployments(owner: string | null, repo: string | null
       return response;
     },
     enabled: Boolean(owner && repo),
+    staleTime: 5000,
     refetchInterval: (query) => {
       const rateLimitRemaining = query.state.data?.rateLimitRemaining;
       return shouldReducePolling(rateLimitRemaining)
@@ -157,6 +161,7 @@ export function usePipelineOverview(owner: string | null, repo: string | null) {
       return response;
     },
     enabled: Boolean(owner && repo),
+    staleTime: 5000,
     refetchInterval: (query) => {
       const rateLimitRemaining = query.state.data?.rateLimitRemaining;
       return shouldReducePolling(rateLimitRemaining)
@@ -187,6 +192,7 @@ export function useIssueDetail(
       return response;
     },
     enabled: Boolean(owner && repo && number !== null),
+    staleTime: 5000,
     refetchInterval: (query) => {
       const rateLimitRemaining = query.state.data?.rateLimitRemaining;
       return shouldReducePolling(rateLimitRemaining)
@@ -217,6 +223,7 @@ export function usePRDetail(
       return response;
     },
     enabled: Boolean(owner && repo && number !== null),
+    staleTime: 5000,
     refetchInterval: (query) => {
       const rateLimitRemaining = query.state.data?.rateLimitRemaining;
       return shouldReducePolling(rateLimitRemaining)
