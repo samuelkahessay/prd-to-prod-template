@@ -21,6 +21,7 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { AppShell } from "@/components/layout/AppShell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { RepoProvider } from "@/lib/repo/context";
+import { QueryClientProvider } from "@/lib/queries/provider";
 
 export default function RootLayout({
   children,
@@ -38,13 +39,15 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <RepoProvider>
-            <TooltipProvider>
-              <AppShell>
-                {children}
-              </AppShell>
-            </TooltipProvider>
-          </RepoProvider>
+          <QueryClientProvider>
+            <RepoProvider>
+              <TooltipProvider>
+                <AppShell>
+                  {children}
+                </AppShell>
+              </TooltipProvider>
+            </RepoProvider>
+          </QueryClientProvider>
         </ThemeProvider>
       </body>
     </html>
