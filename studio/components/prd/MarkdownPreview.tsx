@@ -10,7 +10,7 @@ export function MarkdownPreview({ content }: MarkdownPreviewProps) {
   return (
     <div 
       data-testid="prd-editor-preview"
-      className="prose prose-sm dark:prose-invert max-w-none h-full overflow-auto px-6 py-4"
+      className="prose prose-sm dark:prose-invert mx-auto h-full max-w-prose overflow-auto px-6 py-4"
     >
       <ReactMarkdown>{content}</ReactMarkdown>
     </div>

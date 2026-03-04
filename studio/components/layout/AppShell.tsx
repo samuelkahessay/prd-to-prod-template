@@ -13,7 +13,7 @@ export function AppShell({ children }: AppShellProps) {
         <div className="flex flex-1 flex-col overflow-hidden">
           <TopBar />
           <main 
-            className="flex-1 overflow-y-auto p-4 md:p-6"
+            className="page-fade-in flex-1 overflow-y-auto p-4 md:p-6"
             data-testid="main-content"
           >
             {children}

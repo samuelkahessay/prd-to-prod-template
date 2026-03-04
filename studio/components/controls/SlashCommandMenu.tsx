@@ -10,7 +10,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SLASH_COMMANDS, type SlashCommand } from "@/lib/actions/slash-commands";
+
+const SLASH_COMMANDS = [
+  "/plan",
+  "/decompose",
+  "/repo-assist",
+  "/approve-architecture",
+  "/approve-sensitive",
+] as const;
+
+type SlashCommand = (typeof SLASH_COMMANDS)[number];
 
 interface SlashCommandMenuProps {
   owner: string;

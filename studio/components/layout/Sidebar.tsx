@@ -8,7 +8,7 @@ import { RepoStatusBadge } from "@/components/repo/RepoStatusBadge";
 export function Sidebar() {
   return (
     <aside 
-      className="hidden w-64 flex-col border-r bg-muted/20 md:flex"
+      className="hidden w-64 flex-col border-r bg-muted/20 lg:flex"
       data-testid="sidebar"
     >
       <div className="flex h-14 items-center border-b px-6">

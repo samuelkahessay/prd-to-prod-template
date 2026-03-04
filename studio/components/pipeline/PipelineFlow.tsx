@@ -24,7 +24,7 @@ import { IssueNode } from "@/components/pipeline/nodes/IssueNode";
 import { PrNode } from "@/components/pipeline/nodes/PrNode";
 import { DeployNode } from "@/components/pipeline/nodes/DeployNode";
 import {
-  isActiveStage,
+  mapStageToStatus,
   type PipelineFlowNode,
   type PipelineFlowNodeData,
   type PipelineNodeClickPayload,
@@ -70,7 +70,10 @@ export function PipelineFlow({ issues, prs, workflows, className, onNodeClick }:
           environment: workflow ? inferEnvironment(workflow.name) : undefined,
           onClick: onNodeClick,
         },
-        className: cn(node.className, isActiveStage(node.data.stage) ? "pipeline-node-pulse" : undefined),
+        className: cn(
+          node.className,
+          mapStageToStatus(node.data.stage) === "in_progress" ? "pipeline-node-pulse" : undefined
+        ),
         style: {
           ...(node.style as CSSProperties | undefined),
           "--pipeline-node-pulse-color": node.data.statusColor,
@@ -87,7 +90,7 @@ export function PipelineFlow({ issues, prs, workflows, className, onNodeClick }:
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.2}
+        minZoom={0.3}
         maxZoom={2}
         nodesDraggable={false}
         nodesConnectable={false}
@@ -100,7 +103,7 @@ export function PipelineFlow({ issues, prs, workflows, className, onNodeClick }:
         aria-label="Pipeline flow diagram"
       >
         <Background gap={24} size={1} />
-        <Controls showInteractive={false} />
+        <Controls className="!bg-card/90 !shadow-md" position="bottom-right" showInteractive={false} />
         <MiniMap
           pannable
           zoomable

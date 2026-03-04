@@ -69,8 +69,8 @@ export function PrdWizard({ onComplete }: PrdWizardProps) {
   }, []);
 
   return (
-    <div data-testid="prd-wizard" className="space-y-8">
-      <div className="flex items-center justify-center gap-2">
+    <div data-testid="prd-wizard" className="mx-auto w-full max-w-[720px] space-y-8 px-4 sm:px-6">
+      <div className="flex items-center justify-center gap-2 overflow-x-auto pb-1">
         {STEPS.map((step, index) => (
           <div key={step.label} className="flex items-center gap-2">
             <div
@@ -97,7 +97,7 @@ export function PrdWizard({ onComplete }: PrdWizardProps) {
         ))}
       </div>
 
-      <h2 className="text-xl font-semibold text-center">
+      <h2 className="text-center text-xl font-semibold">
         {STEPS[currentStep].label}
       </h2>
 
@@ -126,7 +126,7 @@ export function PrdWizard({ onComplete }: PrdWizardProps) {
       {currentStep === 2 && (
         <div className="space-y-4">
           <PrdPreview markdown={generatedMarkdown} />
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <Button variant="outline" onClick={handlePreviewBack}>
               Back
             </Button>
@@ -144,7 +144,7 @@ export function PrdWizard({ onComplete }: PrdWizardProps) {
               actionable tasks.
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <Button variant="outline" onClick={handleSubmitBack}>
               Back
             </Button>

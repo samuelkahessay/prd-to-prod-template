@@ -21,31 +21,50 @@ export function PipelineFlowWrapper({
 }: PipelineFlowWrapperProps) {
   if (isLoading) {
     return (
-      <div className="h-[560px] w-full animate-pulse rounded-xl border bg-muted/30" data-testid="pipeline-flow-loading" />
+      <div className="w-full overflow-x-auto">
+        <div
+          className="h-[560px] min-w-[640px] w-full animate-pulse rounded-xl border bg-muted/30 sm:min-w-0"
+          data-testid="pipeline-flow-loading"
+        />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <div
-        className="flex h-[560px] w-full items-center justify-center rounded-xl border bg-card px-6 text-sm text-destructive"
-        data-testid="pipeline-flow-error"
-      >
-        {error}
+      <div className="w-full overflow-x-auto">
+        <div
+          className="flex h-[560px] min-w-[640px] w-full items-center justify-center rounded-xl border bg-card px-6 text-sm text-destructive sm:min-w-0"
+          data-testid="pipeline-flow-error"
+        >
+          {error}
+        </div>
       </div>
     );
   }
 
   if (issues.length === 0 && prs.length === 0 && workflows.length === 0) {
     return (
-      <div
-        className="flex h-[560px] w-full items-center justify-center rounded-xl border bg-card px-6 text-sm text-muted-foreground"
-        data-testid="pipeline-flow-empty"
-      >
-        No pipeline activity yet.
+      <div className="w-full overflow-x-auto">
+        <div
+          className="flex h-[560px] min-w-[640px] w-full items-center justify-center rounded-xl border bg-card px-6 text-sm text-muted-foreground sm:min-w-0"
+          data-testid="pipeline-flow-empty"
+        >
+          No pipeline activity yet.
+        </div>
       </div>
     );
   }
 
-  return <PipelineFlow issues={issues} prs={prs} workflows={workflows} onNodeClick={onNodeClick} />;
+  return (
+    <div className="w-full overflow-x-auto">
+      <PipelineFlow
+        className="min-w-[640px] sm:min-w-0"
+        issues={issues}
+        prs={prs}
+        workflows={workflows}
+        onNodeClick={onNodeClick}
+      />
+    </div>
+  );
 }

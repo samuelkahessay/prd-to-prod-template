@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   CheckCircle2,
@@ -14,6 +17,50 @@ import { PIPELINE_STATUS_COLORS } from '@/lib/theme';
 
 interface StatusCardsProps {
   metrics: PipelineMetrics;
+}
+
+const SHOULD_ANIMATE_COUNTS = process.env.NODE_ENV !== "test";
+
+function useAnimatedNumber(value: number, duration = 650): number {
+  const [displayValue, setDisplayValue] = useState(() =>
+    SHOULD_ANIMATE_COUNTS ? 0 : Math.round(value)
+  );
+  const displayRef = useRef(displayValue);
+
+  useEffect(() => {
+    displayRef.current = displayValue;
+  }, [displayValue]);
+
+  useEffect(() => {
+    if (!SHOULD_ANIMATE_COUNTS) {
+      setDisplayValue(Math.round(value));
+      return;
+    }
+
+    const startValue = displayRef.current;
+    const targetValue = Math.round(value);
+    const startedAt = performance.now();
+    let frame = 0;
+
+    const animate = (now: number) => {
+      const elapsed = now - startedAt;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const next = Math.round(startValue + (targetValue - startValue) * eased);
+      setDisplayValue(next);
+
+      if (progress < 1) {
+        frame = window.requestAnimationFrame(animate);
+      }
+    };
+
+    frame = window.requestAnimationFrame(animate);
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [duration, value]);
+
+  return displayValue;
 }
 
 function getStageColor(
@@ -69,6 +116,9 @@ function getWorkflowColor(
 
 export function StatusCards({ metrics }: StatusCardsProps) {
   const stageColor = PIPELINE_STATUS_COLORS[getStageColor(metrics.currentStage)];
+  const animatedIssueTotal = useAnimatedNumber(metrics.issueCounts.total);
+  const animatedPrOpen = useAnimatedNumber(metrics.prCounts.open);
+  const animatedWorkflowTotal = useAnimatedNumber(metrics.workflowCounts.total);
 
   return (
     <div
@@ -89,7 +139,7 @@ export function StatusCards({ metrics }: StatusCardsProps) {
         </CardHeader>
         <CardContent className="space-y-2">
           <CardTitle className="text-4xl font-bold">
-            {metrics.issueCounts.total}
+            {animatedIssueTotal}
           </CardTitle>
           <p className="text-sm font-medium text-muted-foreground">Issues</p>
           <div className="space-y-1 text-xs text-muted-foreground">
@@ -111,7 +161,7 @@ export function StatusCards({ metrics }: StatusCardsProps) {
         </CardHeader>
         <CardContent className="space-y-2">
           <CardTitle className="text-4xl font-bold">
-            {metrics.prCounts.open}
+            {animatedPrOpen}
           </CardTitle>
           <p className="text-sm font-medium text-muted-foreground">Pull Requests</p>
           <div className="space-y-1 text-xs text-muted-foreground">
@@ -143,7 +193,7 @@ export function StatusCards({ metrics }: StatusCardsProps) {
         </CardHeader>
         <CardContent className="space-y-2">
           <CardTitle className="text-4xl font-bold">
-            {metrics.workflowCounts.total}
+            {animatedWorkflowTotal}
           </CardTitle>
           <p className="text-sm font-medium text-muted-foreground">Workflow Runs</p>
           {metrics.lastWorkflowRun ? (

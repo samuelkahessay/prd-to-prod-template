@@ -1,8 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import { QueryClientProvider } from '@/lib/queries/provider';
 import {
   usePipelineIssues,
   usePipelinePRs,
@@ -23,7 +22,7 @@ function createWrapper() {
   });
 
   return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider>{children}</QueryClientProvider>;
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   };
 }
 

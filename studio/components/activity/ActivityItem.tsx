@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 interface ActivityItemProps {
   event: PipelineEvent;
+  index?: number;
   owner?: string;
   repo?: string;
 }
@@ -114,7 +115,7 @@ function getEventLink(event: PipelineEvent, owner?: string, repo?: string) {
   }
 }
 
-export function ActivityItem({ event, owner, repo }: ActivityItemProps) {
+export function ActivityItem({ event, index = 0, owner, repo }: ActivityItemProps) {
   const icon = getEventIcon(event);
   const title = getEventTitle(event);
   const description = getEventDescription(event);
@@ -149,12 +150,20 @@ export function ActivityItem({ event, owner, repo }: ActivityItemProps) {
         href={link}
         target="_blank"
         rel="noopener noreferrer"
-        className="block px-4 py-3 transition-colors hover:bg-muted/50 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="activity-item-stagger block rounded-md px-4 py-3 transition-colors hover:bg-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={{ animationDelay: `${Math.min(index, 9) * 55}ms` }}
       >
         {content}
       </a>
     );
   }
 
-  return <div className="px-4 py-3">{content}</div>;
+  return (
+    <div
+      className="activity-item-stagger px-4 py-3"
+      style={{ animationDelay: `${Math.min(index, 9) * 55}ms` }}
+    >
+      {content}
+    </div>
+  );
 }

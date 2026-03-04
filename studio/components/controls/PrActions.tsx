@@ -12,7 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { MergeMethod } from "@/lib/actions/pr-actions";
+
+type MergeMethod = "merge" | "squash" | "rebase";
 
 interface PrActionsProps {
   owner: string;

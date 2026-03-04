@@ -91,6 +91,7 @@ export function ActivityFeed({
             <ActivityItem
               key={`${event.type}-${event.timestamp}-${index}`}
               event={event}
+              index={index}
               owner={owner}
               repo={repo}
             />
@@ -106,6 +107,7 @@ export function ActivityFeed({
                     <ActivityItem
                       key={`${event.type}-${event.timestamp}-${index + 5}`}
                       event={event}
+                      index={index + 5}
                       owner={owner}
                       repo={repo}
                     />
