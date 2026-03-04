@@ -143,3 +143,30 @@ export interface PipelineRun {
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Represents a completed pipeline run archived in showcase/.
+ * Created by scripts/archive-run.sh after completing a PRD cycle.
+ */
+export interface ShowcaseEntry {
+  /** Directory name (e.g., "01-user-auth-system") */
+  slug: string;
+  /** Run number (e.g., "01") */
+  runNumber: string;
+  /** Project name extracted from slug (e.g., "user-auth-system") */
+  projectName: string;
+  /** Title from README.md */
+  title: string;
+  /** Git tag (e.g., "v1.0.0") */
+  tag: string;
+  /** Date string (e.g., "March 2026") */
+  date: string;
+  /** Deployment URL if available */
+  deploymentUrl?: string;
+  /** Number of pipeline issues */
+  issueCount?: string;
+  /** Number of PRs merged */
+  prCount?: string;
+  /** Brief summary/description */
+  summary?: string;
+}
