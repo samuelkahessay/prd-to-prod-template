@@ -12,7 +12,7 @@ export function Sidebar() {
       data-testid="sidebar"
     >
       <div className="flex h-14 items-center border-b px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
+        <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
           <Activity className="h-5 w-5" />
           <span>prd-to-prod Studio</span>
         </Link>
@@ -27,8 +27,8 @@ export function Sidebar() {
         </div>
 
         <nav className="grid gap-1 px-4 text-sm font-medium">
-          <Link 
-            href="/" 
+          <Link
+            href="/dashboard"
             className="flex items-center gap-3 rounded-md px-3 py-2 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <LayoutDashboard className="h-4 w-4" />

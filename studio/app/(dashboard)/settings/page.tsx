@@ -12,8 +12,8 @@ export default function SettingsPage() {
   return (
     <div className="page-fade-in container mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
       <div className="flex items-center gap-4">
-        <Link 
-          href="/"
+        <Link
+          href="/dashboard"
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />

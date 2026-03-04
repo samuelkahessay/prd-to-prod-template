@@ -38,6 +38,22 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Pipeline stage colors */
+  --color-stage-prd: var(--stage-prd);
+  --color-stage-decompose: var(--stage-decompose);
+  --color-stage-implement: var(--stage-implement);
+  --color-stage-review: var(--stage-review);
+  --color-stage-merge: var(--stage-merge);
+  --color-stage-deploy: var(--stage-deploy);
+  --color-stage-heal: var(--stage-heal);
+  --color-stage-prd-muted: var(--stage-prd-muted);
+  --color-stage-decompose-muted: var(--stage-decompose-muted);
+  --color-stage-implement-muted: var(--stage-implement-muted);
+  --color-stage-review-muted: var(--stage-review-muted);
+  --color-stage-merge-muted: var(--stage-merge-muted);
+  --color-stage-deploy-muted: var(--stage-deploy-muted);
+  --color-stage-heal-muted: var(--stage-heal-muted);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -51,6 +67,23 @@
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
+
+  /* Pipeline stage colors — light mode */
+  --stage-prd: oklch(0.55 0.15 250);
+  --stage-decompose: oklch(0.50 0.15 280);
+  --stage-implement: oklch(0.55 0.12 165);
+  --stage-review: oklch(0.60 0.12 80);
+  --stage-merge: oklch(0.55 0.12 145);
+  --stage-deploy: oklch(0.52 0.15 310);
+  --stage-heal: oklch(0.58 0.14 40);
+
+  --stage-prd-muted: oklch(0.92 0.04 250);
+  --stage-decompose-muted: oklch(0.92 0.04 280);
+  --stage-implement-muted: oklch(0.92 0.03 165);
+  --stage-review-muted: oklch(0.94 0.04 80);
+  --stage-merge-muted: oklch(0.92 0.03 145);
+  --stage-deploy-muted: oklch(0.92 0.04 310);
+  --stage-heal-muted: oklch(0.93 0.04 40);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -85,6 +118,23 @@
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
+
+  /* Pipeline stage colors — dark mode */
+  --stage-prd: oklch(0.70 0.14 250);
+  --stage-decompose: oklch(0.68 0.14 280);
+  --stage-implement: oklch(0.72 0.11 165);
+  --stage-review: oklch(0.75 0.11 80);
+  --stage-merge: oklch(0.72 0.11 145);
+  --stage-deploy: oklch(0.68 0.14 310);
+  --stage-heal: oklch(0.73 0.13 40);
+
+  --stage-prd-muted: oklch(0.25 0.04 250);
+  --stage-decompose-muted: oklch(0.25 0.04 280);
+  --stage-implement-muted: oklch(0.25 0.03 165);
+  --stage-review-muted: oklch(0.27 0.04 80);
+  --stage-merge-muted: oklch(0.25 0.03 145);
+  --stage-deploy-muted: oklch(0.25 0.04 310);
+  --stage-heal-muted: oklch(0.26 0.04 40);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
@@ -128,6 +178,17 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@keyframes scroll-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -179,5 +240,35 @@
 
   .activity-item-stagger {
     animation: activity-stagger-in 280ms ease-out both;
+  }
+
+  /* Marketing scroll reveal */
+  .scroll-reveal {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  .scroll-reveal.visible {
+    animation: scroll-fade-in 600ms ease-out both;
+  }
+
+  /* Staggered children */
+  .scroll-reveal.visible > .stagger-child:nth-child(1) { animation-delay: 0ms; }
+  .scroll-reveal.visible > .stagger-child:nth-child(2) { animation-delay: 80ms; }
+  .scroll-reveal.visible > .stagger-child:nth-child(3) { animation-delay: 160ms; }
+  .scroll-reveal.visible > .stagger-child:nth-child(4) { animation-delay: 240ms; }
+}
+
+/* Reduced motion: disable all animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .scroll-reveal {
+    opacity: 1;
+    transform: none;
   }
 }
