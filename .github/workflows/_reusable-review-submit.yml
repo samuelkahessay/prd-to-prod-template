@@ -1,0 +1,1148 @@
+#
+# [Reusable] PR Review Submit — Watches for pr-review-agent verdict comments
+# and submits the formal GitHub review as github-actions[bot].
+#
+# This is the reusable (workflow_call) version of pr-review-submit.yml.
+# Callers pass event context via inputs so the workflow can operate on
+# issue_comment or workflow_dispatch semantics without being directly
+# triggered by those events.
+#
+# Flow:
+#   1. pr-review-agent posts a verdict comment starting with [PIPELINE-VERDICT]
+#   2. Caller workflow fires on issue_comment:created, passes context here
+#   3. Parses APPROVE or REQUEST_CHANGES from the comment body
+#   4. Submits the formal GitHub review as github-actions[bot]
+#   5. On APPROVE: marks draft PRs ready, enables auto-merge for [Pipeline] PRs
+#   6. Dispatches repo-assist for next cycle (APPROVE) or posts /repo-assist (REQUEST_CHANGES)
+#
+# Break-glass: workflow_dispatch path allows manual review submission when the
+# comment-based flow is blocked (e.g., action_required on first-time contributor).
+#
+
+name: "[Reusable] Pipeline PR Review Submit"
+
+on:
+  workflow_call:
+    inputs:
+      pipeline_app_id:
+        type: string
+        required: false
+        default: ""
+      healing_enabled:
+        type: string
+        required: false
+        default: "true"
+      template_repo:
+        type: string
+        required: true
+        description: "Central template repo in owner/repo format"
+      event_name:
+        type: string
+        required: true
+        description: "github.event_name from caller"
+      comment_body:
+        type: string
+        required: false
+        default: ""
+      comment_id:
+        type: number
+        required: false
+        default: 0
+        description: "github.event.comment.id from caller"
+      comment_user_login:
+        type: string
+        required: false
+        default: ""
+      repository_owner:
+        type: string
+        required: false
+        default: ""
+        description: "github.repository_owner from caller"
+      issue_number:
+        type: number
+        required: false
+        default: 0
+      is_pull_request:
+        type: boolean
+        required: false
+        default: false
+      # Break-glass manual inputs
+      manual_pr_number:
+        type: string
+        required: false
+        default: ""
+      manual_verdict:
+        type: string
+        required: false
+        default: ""
+      manual_summary:
+        type: string
+        required: false
+        default: ""
+      actor:
+        type: string
+        required: false
+        default: ""
+    secrets:
+      PIPELINE_APP_PRIVATE_KEY:
+        required: false
+      GH_AW_GITHUB_TOKEN:
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  statuses: write
+
+# ---------------------------------------------------------------------------
+# Job 1: issue_comment trigger — automated path
+# ---------------------------------------------------------------------------
+jobs:
+  submit-review-comment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: |
+      inputs.event_name == 'issue_comment' &&
+      inputs.is_pull_request &&
+      inputs.comment_id != 0 &&
+      startsWith(inputs.comment_body, '[PIPELINE-VERDICT]') &&
+      contains(inputs.comment_body, 'gh-aw-agentic-workflow: Pipeline Review Agent') &&
+      inputs.comment_user_login != '' &&
+      (
+        (inputs.repository_owner != '' && inputs.comment_user_login == inputs.repository_owner) ||
+        (inputs.repository_owner == '' && inputs.comment_user_login == github.repository_owner)
+      )
+
+    concurrency:
+      group: "pr-review-submit-${{ inputs.issue_number }}"
+      cancel-in-progress: false
+
+    env:
+      PIPELINE_HEALING_ENABLED: ${{ inputs.healing_enabled }}
+
+    steps:
+      - name: Checkout calling repo
+        uses: actions/checkout@v4
+
+      - name: Checkout pipeline scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.template_repo }}
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            scripts/healing-control.sh
+            scripts/check-autonomy-policy.sh
+          sparse-checkout-cone-mode: false
+          path: .pipeline-scripts
+
+      - name: Generate App token
+        id: app-token
+        if: inputs.pipeline_app_id != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ inputs.pipeline_app_id }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+
+      - name: Check healing pause switch
+        id: healing
+        run: |
+          if .pipeline-scripts/scripts/healing-control.sh is-enabled; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Autonomous healing is paused via PIPELINE_HEALING_ENABLED."
+          fi
+
+      - name: Check idempotency (skip if same verdict already reviewed at current HEAD)
+        id: idempotency
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ inputs.comment_id }}
+        run: |
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+          echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+
+          COMMENT_BODY=$(gh api "/repos/${REPO}/issues/comments/${COMMENT_ID}" --jq '.body')
+          TARGET_VERDICT=$(echo "$COMMENT_BODY" | grep -oP '\*\*VERDICT:\s*\K(APPROVE|REQUEST_CHANGES)' | head -1 || true)
+          if [ "$TARGET_VERDICT" = "APPROVE" ]; then
+            TARGET_STATE="APPROVED"
+          else
+            TARGET_STATE="CHANGES_REQUESTED"
+          fi
+          echo "target_state=${TARGET_STATE}" >> "$GITHUB_OUTPUT"
+
+          EXISTING=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+            --jq "[.[] | select(.user.login == \"github-actions[bot]\" and .commit_id == \"${HEAD_SHA}\" and .state == \"${TARGET_STATE}\")] | length")
+
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "Already reviewed with ${TARGET_STATE} at head SHA ${HEAD_SHA}. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No existing ${TARGET_STATE} review at ${HEAD_SHA}. Proceeding."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Parse verdict and submit review
+        if: steps.idempotency.outputs.skip != 'true'
+        id: review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ inputs.comment_id }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Fetch the comment body via API to avoid direct shell exposure to user content
+          COMMENT_BODY=$(gh api "/repos/${REPO}/issues/comments/${COMMENT_ID}" \
+            --jq '.body')
+
+          # Extract verdict — default to REQUEST_CHANGES if not parseable (fail-safe)
+          VERDICT=$(echo "$COMMENT_BODY" | grep -oP '\*\*VERDICT:\s*\K(APPROVE|REQUEST_CHANGES)' | head -1 || echo "")
+          if [ "$VERDICT" != "APPROVE" ] && [ "$VERDICT" != "REQUEST_CHANGES" ]; then
+            echo "::warning::Could not parse verdict from comment, defaulting to REQUEST_CHANGES"
+            VERDICT="REQUEST_CHANGES"
+          fi
+          echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+          echo "Parsed verdict: ${VERDICT}"
+
+          # Extract summary (first non-empty line after "### Summary")
+          SUMMARY=$(echo "$COMMENT_BODY" | awk '/^### Summary/{found=1; next} found && /^[^[:space:]]/{print; exit} found && /^[[:space:]]*$/{next} found{print; exit}' | head -1 || echo "Review completed.")
+          echo "summary=${SUMMARY}" >> "$GITHUB_OUTPUT"
+
+          # Get PR title for [Pipeline] detection and linked issue extraction
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+          echo "pr_title=${PR_TITLE}" >> "$GITHUB_OUTPUT"
+
+          # Extract linked issue number from PR body via jq (zero shell exposure to body)
+          ISSUE_NUMBER=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json body \
+            --jq '[.body | scan("(?i)(?:close[ds]?|fix(?:e[ds])?|resolve[ds]?)\\s+#(\\d+)")] | first | .[]? // empty' \
+            | head -1 || true)
+          echo "issue_number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+
+          # Build review body from the agent comment (strip the marker line)
+          REVIEW_BODY=$(echo "$COMMENT_BODY" | grep -v '^\[PIPELINE-VERDICT\]' | sed '/./,$!d')
+          if [ "$VERDICT" = "APPROVE" ]; then
+            REVIEW_BODY="## Pipeline Review — Approved"$'\n\n'"${REVIEW_BODY}"$'\n\n'"---"$'\n'"*Submitted by Pipeline Review Submit (github-actions[bot]).*"
+          else
+            REVIEW_BODY="## Pipeline Review — Changes Requested"$'\n\n'"${REVIEW_BODY}"$'\n\n'"---"$'\n'"*Submitted by Pipeline Review Submit (github-actions[bot]).*"
+          fi
+
+          # Submit the formal review as github-actions[bot] (via GITHUB_TOKEN)
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+            -f event="${VERDICT}" \
+            -f body="${REVIEW_BODY}"
+
+          echo "Submitted ${VERDICT} review on PR #${PR_NUMBER}"
+
+      - name: Set review status check
+        if: always() && steps.idempotency.outputs.head_sha != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.idempotency.outputs.head_sha }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The "review" status check is required by the branch protection ruleset.
+          # Always set it — even if the review step was skipped by idempotency,
+          # the status check may still be missing from a prior run.
+          VERDICT="${{ steps.review.outputs.verdict }}"
+          if [ -z "$VERDICT" ]; then
+            # Review was skipped — check existing review to determine verdict
+            VERDICT=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+              --jq '[.[] | select(.user.login == "github-actions[bot]")] | last | .state // ""' || echo "")
+          fi
+          if [ -z "$VERDICT" ]; then
+            echo "No verdict available — skipping status check"
+            exit 0
+          fi
+          gh api --method POST "/repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state="success" \
+            -f context="review" \
+            -f description="Review completed: ${VERDICT}"
+          echo "Set 'review' status check to success on ${HEAD_SHA} (verdict: ${VERDICT})"
+
+      - name: Mark draft PR ready (APPROVE only)
+        if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_DRAFT=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json isDraft -q '.isDraft')
+          if [ "$PR_DRAFT" = "true" ]; then
+            gh pr ready "$PR_NUMBER" --repo "$REPO" || echo "::warning::Could not mark PR as ready"
+          else
+            echo "PR #${PR_NUMBER} is already ready for review."
+          fi
+
+      - name: Evaluate autonomy policy for autonomous merge (APPROVE only)
+        if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE'
+        id: policy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          PR_TITLE: ${{ steps.review.outputs.pr_title }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${PR_TITLE:-}" ]; then
+            PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+          fi
+
+          echo "blocked=false" >> "$GITHUB_OUTPUT"
+          echo "blocked_action=" >> "$GITHUB_OUTPUT"
+          echo "blocked_file=" >> "$GITHUB_OUTPUT"
+          echo "blocked_reason=" >> "$GITHUB_OUTPUT"
+
+          if [[ "$PR_TITLE" != "[Pipeline]"* ]]; then
+            echo "pipeline_pr=false" >> "$GITHUB_OUTPUT"
+            echo "auto_merge_allowed=false" >> "$GITHUB_OUTPUT"
+            echo "auto_follow_up_allowed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "pipeline_pr=true" >> "$GITHUB_OUTPUT"
+
+          mapfile -t CHANGED_FILES < <(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100" --paginate --jq '.[].filename')
+
+          for FILE in "${CHANGED_FILES[@]}"; do
+            [ -n "$FILE" ] || continue
+
+            for ACTION in policy_artifact_change workflow_file_change deploy_policy_change sensitive_app_change; do
+              MATCH_JSON=$(bash .pipeline-scripts/scripts/check-autonomy-policy.sh match "$ACTION" "$FILE" autonomy-policy.yml)
+              MATCHED=$(printf '%s' "$MATCH_JSON" | jq -r '.matched')
+              MODE=$(printf '%s' "$MATCH_JSON" | jq -r '.mode')
+
+              if [ "$MATCHED" = "true" ] && [ "$MODE" = "human_required" ]; then
+                BLOCKED_REASON=$(printf '%s' "$MATCH_JSON" | jq -r '.requires_human_reason')
+                echo "blocked=true" >> "$GITHUB_OUTPUT"
+                echo "blocked_action=${ACTION}" >> "$GITHUB_OUTPUT"
+                echo "blocked_file=${FILE}" >> "$GITHUB_OUTPUT"
+                echo "blocked_reason=${BLOCKED_REASON}" >> "$GITHUB_OUTPUT"
+                echo "auto_merge_allowed=false" >> "$GITHUB_OUTPUT"
+                echo "auto_follow_up_allowed=false" >> "$GITHUB_OUTPUT"
+                echo "Autonomous merge blocked by ${ACTION} on ${FILE}"
+                exit 0
+              fi
+            done
+          done
+
+          echo "auto_merge_allowed=true" >> "$GITHUB_OUTPUT"
+          echo "auto_follow_up_allowed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Comment autonomy policy block on PR
+        if: steps.policy.outputs.blocked == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+          BLOCKED_ACTION: ${{ steps.policy.outputs.blocked_action }}
+          BLOCKED_FILE: ${{ steps.policy.outputs.blocked_file }}
+          BLOCKED_REASON: ${{ steps.policy.outputs.blocked_reason }}
+        run: |
+          if [ "$BLOCKED_ACTION" = "sensitive_app_change" ]; then
+            BODY="## Sensitive Path Gate"
+            BODY="${BODY}"$'\n\n'"Autonomous merge blocked. This PR modifies a sensitive path:"
+            BODY="${BODY}"$'\n\n'"- **File**: \`${BLOCKED_FILE}\`"
+            BODY="${BODY}"$'\n'"- **Policy**: \`${BLOCKED_ACTION}\`"
+            BODY="${BODY}"$'\n'"- **Reason**: ${BLOCKED_REASON}"
+            BODY="${BODY}"$'\n\n'"To approve, the repository owner must comment \`/approve-sensitive\` on this PR."
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$BODY"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+              "Autonomous merge blocked by autonomy policy. File \`${BLOCKED_FILE}\` matched \`${BLOCKED_ACTION}\`. ${BLOCKED_REASON} Human review and manual merge are required for this PR."
+          fi
+
+      - name: Set sensitive-review pending status
+        if: steps.policy.outputs.blocked == 'true' && steps.policy.outputs.blocked_action == 'sensitive_app_change'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.idempotency.outputs.head_sha }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api --method POST "/repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state="pending" \
+            -f context="sensitive-review" \
+            -f description="Sensitive path change — awaiting /approve-sensitive from repo owner"
+          echo "Set sensitive-review pending status on ${HEAD_SHA}"
+
+      - name: Enable auto-merge (APPROVE only)
+        if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
+        env:
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          PR_TITLE: ${{ steps.review.outputs.pr_title }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [[ "$PR_TITLE" == "[Pipeline]"* ]]; then
+            if [ -z "$MERGE_TOKEN" ]; then
+              echo "::error::GH_AW_GITHUB_TOKEN is required for pipeline auto-merge so downstream push workflows can run."
+              exit 1
+            fi
+            GH_TOKEN="$MERGE_TOKEN" gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash || echo "::warning::Could not enable auto-merge"
+            echo "PR #${PR_NUMBER} approved and auto-merge enabled."
+          else
+            echo "PR #${PR_NUMBER} approved. Non-pipeline PR — skipping auto-merge."
+          fi
+
+      - name: Record auto-merge evidence (APPROVE only)
+        if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.idempotency.outputs.head_sha }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          PR_TITLE: ${{ steps.review.outputs.pr_title }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [[ "$PR_TITLE" != "[Pipeline]"* ]]; then
+            echo "Non-pipeline PR — skipping auto-merge evidence status."
+            exit 0
+          fi
+          if [ -z "$HEAD_SHA" ]; then
+            echo "::warning::HEAD_SHA unavailable — cannot record auto-merge evidence."
+            exit 0
+          fi
+          gh api --method POST "/repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state="success" \
+            -f context="auto-merge-armed" \
+            -f description="Auto-merge enabled by PR Review Submit"
+          echo "Recorded auto-merge evidence on ${HEAD_SHA}"
+
+      - name: Close linked issues after merge (APPROVE only)
+        if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_NUMBER: ${{ steps.review.outputs.issue_number }}
+          PIPELINE_PR: ${{ steps.policy.outputs.pipeline_pr }}
+          POLICY_BLOCKED: ${{ steps.policy.outputs.blocked }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$PIPELINE_PR" = "true" ] && [ "$POLICY_BLOCKED" = "true" ]; then
+            echo "Pipeline PR is policy-blocked and was not auto-merged. Skipping merge observation."
+            exit 0
+          fi
+
+          # Poll for merge completion and close linked issues as a deterministic
+          # backstop. The merge itself uses GH_AW_GITHUB_TOKEN so downstream
+          # push/merge workflows can still fire normally.
+          # Poll for merge completion (auto-merge typically completes within seconds).
+          MERGED=false
+          for i in $(seq 1 24); do
+            sleep 5
+            STATE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json state --jq '.state')
+            if [ "$STATE" = "MERGED" ]; then
+              MERGED=true
+              break
+            fi
+            echo "PR #${PR_NUMBER} state: ${STATE} (attempt $i/24)"
+          done
+
+          if [ "$MERGED" = "true" ]; then
+            echo "PR #${PR_NUMBER} merged. Closing linked issues."
+            if [ -n "${ISSUE_NUMBER:-}" ]; then
+              ISSUE_STATE=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
+              if [ "$ISSUE_STATE" = "OPEN" ]; then
+                gh issue close "$ISSUE_NUMBER" --repo "$REPO" \
+                  -c "Closed by merge of PR #${PR_NUMBER}." || \
+                  echo "::warning::Could not close issue #${ISSUE_NUMBER}"
+              else
+                echo "Issue #${ISSUE_NUMBER} already ${ISSUE_STATE}"
+              fi
+            else
+              echo "No linked issue found — skipping issue close"
+            fi
+          else
+            echo "::warning::Merge not observed within 120s for PR #${PR_NUMBER}."
+            if [ -n "${ISSUE_NUMBER:-}" ]; then
+              ISSUE_STATE=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
+              if [ "$ISSUE_STATE" = "OPEN" ]; then
+                gh issue comment "$ISSUE_NUMBER" --repo "$REPO" \
+                  --body "Merge not observed within 120s for PR #${PR_NUMBER}. Issue closure deferred to watchdog." || true
+              fi
+            fi
+          fi
+
+      - name: Close superseded duplicate PRs
+        if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_NUMBER: ${{ steps.review.outputs.issue_number }}
+          PIPELINE_PR: ${{ steps.policy.outputs.pipeline_pr }}
+          POLICY_BLOCKED: ${{ steps.policy.outputs.blocked }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$PIPELINE_PR" = "true" ] && [ "$POLICY_BLOCKED" = "true" ]; then
+            echo "Pipeline PR is policy-blocked and was not auto-merged. Skipping superseded PR cleanup."
+            exit 0
+          fi
+
+          if [ -z "${ISSUE_NUMBER:-}" ]; then
+            echo "No linked issue — skipping superseded PR check"
+            exit 0
+          fi
+
+          # Check if this PR actually merged
+          STATE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json state --jq '.state')
+          if [ "$STATE" != "MERGED" ]; then
+            echo "PR #${PR_NUMBER} not merged — skipping superseded PR cleanup"
+            exit 0
+          fi
+
+          # Find other open [Pipeline] PRs referencing the same issue
+          DUPES=$(gh pr list --repo "$REPO" --state open \
+            --json number,title,body \
+            --jq "[.[] | select(
+              .number != ${PR_NUMBER} and
+              (.title | startswith(\"[Pipeline]\")) and
+              (.body | test(\"(?i)(close[ds]?|fix(?:e[ds])?|resolve[ds]?)\\\\s+#${ISSUE_NUMBER}\\\\b\"))
+            )] | .[].number")
+
+          if [ -z "$DUPES" ]; then
+            echo "No superseded PRs found for issue #${ISSUE_NUMBER}"
+            exit 0
+          fi
+
+          for DUP in $DUPES; do
+            echo "Closing superseded PR #${DUP}"
+            gh pr close "$DUP" --repo "$REPO" --delete-branch \
+              -c "Superseded by PR #${PR_NUMBER} which merged and closed issue #${ISSUE_NUMBER}." || \
+              echo "::warning::Could not close PR #${DUP}"
+          done
+
+      - name: Dispatch repo-assist for next cycle
+        if: always() && steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict != '' && steps.healing.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
+          REVIEW_SUMMARY: ${{ steps.review.outputs.summary }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          ISSUE_NUMBER: ${{ steps.review.outputs.issue_number }}
+          PIPELINE_PR: ${{ steps.policy.outputs.pipeline_pr }}
+          POLICY_BLOCKED: ${{ steps.policy.outputs.blocked }}
+          AUTO_FOLLOW_UP_ALLOWED: ${{ steps.policy.outputs.auto_follow_up_allowed }}
+          REPO: ${{ github.repository }}
+        run: |
+          VERDICT="$REVIEW_VERDICT"
+          SUMMARY="$REVIEW_SUMMARY"
+
+          OPEN_ISSUES=$(gh issue list --repo "$REPO" \
+            --label pipeline --state open --json number,title,labels \
+            --jq '[.[] | select(
+              .title != "[Pipeline] Status" and
+              ([.labels[]?.name] | any(. == "feature" or . == "infra" or . == "bug" or . == "docs" or . == "test"))
+            )] | length')
+          OPEN_PRS=$(gh pr list --repo "$REPO" \
+            --state open --json number,title --jq '[.[] | select(.title // "" | startswith("[Pipeline]"))] | length')
+          TOTAL=$((OPEN_ISSUES + OPEN_PRS))
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "No open pipeline issues or PRs remaining. Pipeline complete!"
+            exit 0
+          fi
+
+          echo "Review verdict: $VERDICT. Found $TOTAL open pipeline items."
+
+          if [ "$VERDICT" = "APPROVE" ]; then
+            if [ "$PIPELINE_PR" = "true" ] && [ "$POLICY_BLOCKED" = "true" ] && [ "$AUTO_FOLLOW_UP_ALLOWED" != "true" ]; then
+              echo "Pipeline PR is policy-blocked. Skipping autonomous follow-up dispatch."
+              exit 0
+            fi
+
+            # APPROVE path: dispatch repo-assist in scheduled mode for next issue
+            gh workflow run repo-assist.lock.yml --repo "$REPO" || \
+              echo "::warning::Could not dispatch repo-assist"
+          else
+            # REQUEST_CHANGES path: post /repo-assist on the linked issue so the
+            # agent enters Command Mode with specific fix instructions.
+            TARGET_ISSUE="${ISSUE_NUMBER:-}"
+            if [ -n "$TARGET_ISSUE" ]; then
+              gh issue comment "$TARGET_ISSUE" --repo "$REPO" \
+                --body "/repo-assist Fix review feedback on PR #${PR_NUMBER}. The reviewer said: ${SUMMARY}. Read the full review on PR #${PR_NUMBER}, implement all requested changes, push fixes to the PR branch, and comment what you changed." || \
+                echo "::warning::Could not post /repo-assist comment"
+            else
+              echo "::warning::No linked issue found for PR #${PR_NUMBER} — cannot post /repo-assist"
+            fi
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Job 2: workflow_dispatch trigger — break-glass manual path
+  # ---------------------------------------------------------------------------
+  submit-review-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: inputs.event_name == 'workflow_dispatch'
+
+    concurrency:
+      group: "pr-review-submit-${{ inputs.manual_pr_number }}"
+      cancel-in-progress: false
+
+    env:
+      PIPELINE_HEALING_ENABLED: ${{ inputs.healing_enabled }}
+
+    steps:
+      - name: Checkout calling repo
+        uses: actions/checkout@v4
+
+      - name: Checkout pipeline scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.template_repo }}
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            scripts/healing-control.sh
+            scripts/check-autonomy-policy.sh
+          sparse-checkout-cone-mode: false
+          path: .pipeline-scripts
+
+      - name: Generate App token
+        id: app-token
+        if: inputs.pipeline_app_id != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ inputs.pipeline_app_id }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+
+      - name: Check healing pause switch
+        id: healing
+        run: |
+          if .pipeline-scripts/scripts/healing-control.sh is-enabled; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Autonomous healing is paused via PIPELINE_HEALING_ENABLED."
+          fi
+
+      - name: Check idempotency (skip if same verdict already reviewed at current HEAD)
+        id: idempotency
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          REPO: ${{ github.repository }}
+          TARGET_VERDICT: ${{ inputs.manual_verdict }}
+        run: |
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+          echo "head_sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+
+          if [ "$TARGET_VERDICT" = "APPROVE" ]; then
+            TARGET_STATE="APPROVED"
+          else
+            TARGET_STATE="CHANGES_REQUESTED"
+          fi
+          echo "target_state=${TARGET_STATE}" >> "$GITHUB_OUTPUT"
+
+          EXISTING=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+            --jq "[.[] | select(.user.login == \"github-actions[bot]\" and .commit_id == \"${HEAD_SHA}\" and .state == \"${TARGET_STATE}\")] | length")
+
+          if [ "$EXISTING" -gt 0 ]; then
+            echo "Already reviewed with ${TARGET_STATE} at head SHA ${HEAD_SHA}. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No existing ${TARGET_STATE} review at ${HEAD_SHA}. Proceeding."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Submit review from dispatch inputs
+        if: steps.idempotency.outputs.skip != 'true'
+        id: review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          VERDICT: ${{ inputs.manual_verdict }}
+          SUMMARY: ${{ inputs.manual_summary }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+          echo "Submitting break-glass ${VERDICT} review on PR #${PR_NUMBER}"
+
+          # Get PR title for [Pipeline] detection and linked issue extraction
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+          echo "pr_title=${PR_TITLE}" >> "$GITHUB_OUTPUT"
+
+          # Extract linked issue number from PR body
+          ISSUE_NUMBER=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json body \
+            --jq '[.body | scan("(?i)(?:close[ds]?|fix(?:e[ds])?|resolve[ds]?)\\s+#(\\d+)")] | first | .[]? // empty' \
+            | head -1 || true)
+          echo "issue_number=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+
+          REVIEW_BODY="## Pipeline Review — Break-glass ${VERDICT}"$'\n\n'"${SUMMARY}"$'\n\n'"---"$'\n'"*Submitted via workflow_dispatch by @${{ inputs.actor }}.*"
+
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+            -f event="${VERDICT}" \
+            -f body="${REVIEW_BODY}"
+
+          echo "Submitted ${VERDICT} review on PR #${PR_NUMBER}"
+
+      - name: Set review status check
+        if: always() && steps.idempotency.outputs.head_sha != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.idempotency.outputs.head_sha }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          VERDICT="${{ steps.review.outputs.verdict }}"
+          if [ -z "$VERDICT" ]; then
+            VERDICT=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
+              --jq '[.[] | select(.user.login == "github-actions[bot]")] | last | .state // ""' || echo "")
+          fi
+          if [ -z "$VERDICT" ]; then
+            VERDICT="${{ inputs.manual_verdict }}"
+          fi
+          if [ -z "$VERDICT" ]; then
+            echo "No verdict available — skipping status check"
+            exit 0
+          fi
+          gh api --method POST "/repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state="success" \
+            -f context="review" \
+            -f description="Review completed: ${VERDICT}"
+          echo "Set 'review' status check to success on ${HEAD_SHA} (verdict: ${VERDICT})"
+
+      - name: Mark draft PR ready (APPROVE only)
+        if: always() && inputs.manual_verdict == 'APPROVE'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_DRAFT=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json isDraft -q '.isDraft')
+          if [ "$PR_DRAFT" = "true" ]; then
+            gh pr ready "$PR_NUMBER" --repo "$REPO" || echo "::warning::Could not mark PR as ready"
+          else
+            echo "PR #${PR_NUMBER} is already ready for review."
+          fi
+
+      - name: Evaluate autonomy policy for autonomous merge (APPROVE only)
+        if: always() && inputs.manual_verdict == 'APPROVE'
+        id: policy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          PR_TITLE: ${{ steps.review.outputs.pr_title }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${PR_TITLE:-}" ]; then
+            PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+          fi
+
+          echo "blocked=false" >> "$GITHUB_OUTPUT"
+          echo "blocked_action=" >> "$GITHUB_OUTPUT"
+          echo "blocked_file=" >> "$GITHUB_OUTPUT"
+          echo "blocked_reason=" >> "$GITHUB_OUTPUT"
+
+          if [[ "$PR_TITLE" != "[Pipeline]"* ]]; then
+            echo "pipeline_pr=false" >> "$GITHUB_OUTPUT"
+            echo "auto_merge_allowed=false" >> "$GITHUB_OUTPUT"
+            echo "auto_follow_up_allowed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "pipeline_pr=true" >> "$GITHUB_OUTPUT"
+
+          mapfile -t CHANGED_FILES < <(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100" --paginate --jq '.[].filename')
+
+          for FILE in "${CHANGED_FILES[@]}"; do
+            [ -n "$FILE" ] || continue
+
+            for ACTION in policy_artifact_change workflow_file_change deploy_policy_change sensitive_app_change; do
+              MATCH_JSON=$(bash .pipeline-scripts/scripts/check-autonomy-policy.sh match "$ACTION" "$FILE" autonomy-policy.yml)
+              MATCHED=$(printf '%s' "$MATCH_JSON" | jq -r '.matched')
+              MODE=$(printf '%s' "$MATCH_JSON" | jq -r '.mode')
+
+              if [ "$MATCHED" = "true" ] && [ "$MODE" = "human_required" ]; then
+                BLOCKED_REASON=$(printf '%s' "$MATCH_JSON" | jq -r '.requires_human_reason')
+                echo "blocked=true" >> "$GITHUB_OUTPUT"
+                echo "blocked_action=${ACTION}" >> "$GITHUB_OUTPUT"
+                echo "blocked_file=${FILE}" >> "$GITHUB_OUTPUT"
+                echo "blocked_reason=${BLOCKED_REASON}" >> "$GITHUB_OUTPUT"
+                echo "auto_merge_allowed=false" >> "$GITHUB_OUTPUT"
+                echo "auto_follow_up_allowed=false" >> "$GITHUB_OUTPUT"
+                echo "Autonomous merge blocked by ${ACTION} on ${FILE}"
+                exit 0
+              fi
+            done
+          done
+
+          echo "auto_merge_allowed=true" >> "$GITHUB_OUTPUT"
+          echo "auto_follow_up_allowed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Comment autonomy policy block on PR
+        if: steps.policy.outputs.blocked == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          REPO: ${{ github.repository }}
+          BLOCKED_ACTION: ${{ steps.policy.outputs.blocked_action }}
+          BLOCKED_FILE: ${{ steps.policy.outputs.blocked_file }}
+          BLOCKED_REASON: ${{ steps.policy.outputs.blocked_reason }}
+        run: |
+          if [ "$BLOCKED_ACTION" = "sensitive_app_change" ]; then
+            BODY="## Sensitive Path Gate"
+            BODY="${BODY}"$'\n\n'"Autonomous merge blocked. This PR modifies a sensitive path:"
+            BODY="${BODY}"$'\n\n'"- **File**: \`${BLOCKED_FILE}\`"
+            BODY="${BODY}"$'\n'"- **Policy**: \`${BLOCKED_ACTION}\`"
+            BODY="${BODY}"$'\n'"- **Reason**: ${BLOCKED_REASON}"
+            BODY="${BODY}"$'\n\n'"To approve, the repository owner must comment \`/approve-sensitive\` on this PR."
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$BODY"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+              "Autonomous merge blocked by autonomy policy. File \`${BLOCKED_FILE}\` matched \`${BLOCKED_ACTION}\`. ${BLOCKED_REASON} Human review and manual merge are required for this PR."
+          fi
+
+      - name: Set sensitive-review pending status
+        if: steps.policy.outputs.blocked == 'true' && steps.policy.outputs.blocked_action == 'sensitive_app_change'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.idempotency.outputs.head_sha }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api --method POST "/repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state="pending" \
+            -f context="sensitive-review" \
+            -f description="Sensitive path change — awaiting /approve-sensitive from repo owner"
+          echo "Set sensitive-review pending status on ${HEAD_SHA}"
+
+      - name: Enable auto-merge (APPROVE only)
+        if: always() && inputs.manual_verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
+        env:
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+
+          if [[ "$PR_TITLE" == "[Pipeline]"* ]]; then
+            if [ -z "$MERGE_TOKEN" ]; then
+              echo "::error::GH_AW_GITHUB_TOKEN is required for pipeline auto-merge so downstream push workflows can run."
+              exit 1
+            fi
+            GH_TOKEN="$MERGE_TOKEN" gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash || echo "::warning::Could not enable auto-merge"
+            echo "PR #${PR_NUMBER} approved and auto-merge enabled."
+          else
+            echo "PR #${PR_NUMBER} approved. Non-pipeline PR — skipping auto-merge."
+          fi
+
+      - name: Record auto-merge evidence (APPROVE only)
+        if: always() && inputs.manual_verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.idempotency.outputs.head_sha }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          PR_TITLE: ${{ steps.review.outputs.pr_title }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${PR_TITLE:-}" ]; then
+            PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+          fi
+
+          if [[ "$PR_TITLE" != "[Pipeline]"* ]]; then
+            echo "Non-pipeline PR — skipping auto-merge evidence status."
+            exit 0
+          fi
+          if [ -z "$HEAD_SHA" ]; then
+            echo "::warning::HEAD_SHA unavailable — cannot record auto-merge evidence."
+            exit 0
+          fi
+          gh api --method POST "/repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state="success" \
+            -f context="auto-merge-armed" \
+            -f description="Auto-merge enabled by PR Review Submit"
+          echo "Recorded auto-merge evidence on ${HEAD_SHA}"
+
+      - name: Close linked issues after merge (APPROVE only)
+        if: always() && inputs.manual_verdict == 'APPROVE'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          ISSUE_NUMBER: ${{ steps.review.outputs.issue_number }}
+          PIPELINE_PR: ${{ steps.policy.outputs.pipeline_pr }}
+          POLICY_BLOCKED: ${{ steps.policy.outputs.blocked }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$PIPELINE_PR" = "true" ] && [ "$POLICY_BLOCKED" = "true" ]; then
+            echo "Pipeline PR is policy-blocked and was not auto-merged. Skipping merge observation."
+            exit 0
+          fi
+
+          MERGED=false
+          for i in $(seq 1 24); do
+            sleep 5
+            STATE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json state --jq '.state')
+            if [ "$STATE" = "MERGED" ]; then
+              MERGED=true
+              break
+            fi
+            echo "PR #${PR_NUMBER} state: ${STATE} (attempt $i/24)"
+          done
+
+          if [ "$MERGED" = "true" ]; then
+            echo "PR #${PR_NUMBER} merged. Closing linked issues."
+            TARGET="${ISSUE_NUMBER:-}"
+            if [ -z "$TARGET" ]; then
+              TARGET=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json body \
+                --jq '[.body | scan("(?i)(?:close[ds]?|fix(?:e[ds])?|resolve[ds]?)\\s+#(\\d+)")] | first | .[]? // empty' \
+                | head -1 || true)
+            fi
+            if [ -n "$TARGET" ]; then
+              ISSUE_STATE=$(gh issue view "$TARGET" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
+              if [ "$ISSUE_STATE" = "OPEN" ]; then
+                gh issue close "$TARGET" --repo "$REPO" \
+                  -c "Closed by merge of PR #${PR_NUMBER}." || \
+                  echo "::warning::Could not close issue #${TARGET}"
+              else
+                echo "Issue #${TARGET} already ${ISSUE_STATE}"
+              fi
+            else
+              echo "No linked issue found — skipping issue close"
+            fi
+          else
+            echo "::warning::Merge not observed within 120s for PR #${PR_NUMBER}."
+            TARGET="${ISSUE_NUMBER:-}"
+            if [ -z "$TARGET" ]; then
+              TARGET=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json body \
+                --jq '[.body | scan("(?i)(?:close[ds]?|fix(?:e[ds])?|resolve[ds]?)\\s+#(\\d+)")] | first | .[]? // empty' \
+                | head -1 || true)
+            fi
+            if [ -n "$TARGET" ]; then
+              ISSUE_STATE=$(gh issue view "$TARGET" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
+              if [ "$ISSUE_STATE" = "OPEN" ]; then
+                gh issue comment "$TARGET" --repo "$REPO" \
+                  --body "Merge not observed within 120s for PR #${PR_NUMBER}. Issue closure deferred to watchdog." || true
+              fi
+            fi
+          fi
+
+      - name: Close superseded duplicate PRs
+        if: always() && inputs.manual_verdict == 'APPROVE'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          ISSUE_NUMBER: ${{ steps.review.outputs.issue_number }}
+          PIPELINE_PR: ${{ steps.policy.outputs.pipeline_pr }}
+          POLICY_BLOCKED: ${{ steps.policy.outputs.blocked }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$PIPELINE_PR" = "true" ] && [ "$POLICY_BLOCKED" = "true" ]; then
+            echo "Pipeline PR is policy-blocked and was not auto-merged. Skipping superseded PR cleanup."
+            exit 0
+          fi
+
+          TARGET="${ISSUE_NUMBER:-}"
+          if [ -z "$TARGET" ]; then
+            TARGET=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json body \
+              --jq '[.body | scan("(?i)(?:close[ds]?|fix(?:e[ds])?|resolve[ds]?)\\s+#(\\d+)")] | first | .[]? // empty' \
+              | head -1 || true)
+          fi
+          if [ -z "$TARGET" ]; then
+            echo "No linked issue — skipping superseded PR check"
+            exit 0
+          fi
+
+          STATE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json state --jq '.state')
+          if [ "$STATE" != "MERGED" ]; then
+            echo "PR #${PR_NUMBER} not merged — skipping superseded PR cleanup"
+            exit 0
+          fi
+
+          DUPES=$(gh pr list --repo "$REPO" --state open \
+            --json number,title,body \
+            --jq "[.[] | select(
+              .number != ${PR_NUMBER} and
+              (.title | startswith(\"[Pipeline]\")) and
+              (.body | test(\"(?i)(close[ds]?|fix(?:e[ds])?|resolve[ds]?)\\\\s+#${TARGET}\\\\b\"))
+            )] | .[].number")
+
+          if [ -z "$DUPES" ]; then
+            echo "No superseded PRs found for issue #${TARGET}"
+            exit 0
+          fi
+
+          for DUP in $DUPES; do
+            echo "Closing superseded PR #${DUP}"
+            gh pr close "$DUP" --repo "$REPO" --delete-branch \
+              -c "Superseded by PR #${PR_NUMBER} which merged and closed issue #${TARGET}." || \
+              echo "::warning::Could not close PR #${DUP}"
+          done
+
+      - name: Dispatch repo-assist for next cycle
+        if: always() && steps.healing.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
+          INPUT_VERDICT: ${{ inputs.manual_verdict }}
+          REVIEW_SUMMARY: ${{ inputs.manual_summary }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          ISSUE_NUMBER: ${{ steps.review.outputs.issue_number }}
+          PIPELINE_PR: ${{ steps.policy.outputs.pipeline_pr }}
+          POLICY_BLOCKED: ${{ steps.policy.outputs.blocked }}
+          AUTO_FOLLOW_UP_ALLOWED: ${{ steps.policy.outputs.auto_follow_up_allowed }}
+          REPO: ${{ github.repository }}
+        run: |
+          VERDICT="${REVIEW_VERDICT:-$INPUT_VERDICT}"
+          SUMMARY="$REVIEW_SUMMARY"
+
+          OPEN_ISSUES=$(gh issue list --repo "$REPO" \
+            --label pipeline --state open --json number,title,labels \
+            --jq '[.[] | select(
+              .title != "[Pipeline] Status" and
+              ([.labels[]?.name] | any(. == "feature" or . == "infra" or . == "bug" or . == "docs" or . == "test"))
+            )] | length')
+          OPEN_PRS=$(gh pr list --repo "$REPO" \
+            --state open --json number,title --jq '[.[] | select(.title // "" | startswith("[Pipeline]"))] | length')
+          TOTAL=$((OPEN_ISSUES + OPEN_PRS))
+
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "No open pipeline issues or PRs remaining. Pipeline complete!"
+            exit 0
+          fi
+
+          echo "Review verdict: $VERDICT. Found $TOTAL open pipeline items."
+
+          if [ "$VERDICT" = "APPROVE" ]; then
+            if [ "$PIPELINE_PR" = "true" ] && [ "$POLICY_BLOCKED" = "true" ] && [ "$AUTO_FOLLOW_UP_ALLOWED" != "true" ]; then
+              echo "Pipeline PR is policy-blocked. Skipping autonomous follow-up dispatch."
+              exit 0
+            fi
+
+            gh workflow run repo-assist.lock.yml --repo "$REPO" || \
+              echo "::warning::Could not dispatch repo-assist"
+          else
+            TARGET_ISSUE="${ISSUE_NUMBER:-}"
+            if [ -n "$TARGET_ISSUE" ]; then
+              gh issue comment "$TARGET_ISSUE" --repo "$REPO" \
+                --body "/repo-assist Fix review feedback on PR #${PR_NUMBER}. The reviewer said: ${SUMMARY}. Read the full review on PR #${PR_NUMBER}, implement all requested changes, push fixes to the PR branch, and comment what you changed." || \
+                echo "::warning::Could not post /repo-assist comment"
+            else
+              echo "::warning::No linked issue found for PR #${PR_NUMBER} — cannot post /repo-assist"
+            fi
+          fi
+
+      - name: Log paused autonomous follow-up skip
+        if: always() && steps.healing.outputs.enabled != 'true'
+        run: echo "Review completed, but autonomous follow-up is paused via PIPELINE_HEALING_ENABLED."
+
+  # ---------------------------------------------------------------------------
+  # Job 3: /approve-sensitive comment handler
+  # ---------------------------------------------------------------------------
+  approve-sensitive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: |
+      inputs.event_name == 'issue_comment' &&
+      inputs.is_pull_request &&
+      startsWith(inputs.comment_body, '/approve-sensitive') &&
+      inputs.comment_user_login != '' &&
+      (
+        (inputs.repository_owner != '' && inputs.comment_user_login == inputs.repository_owner) ||
+        (inputs.repository_owner == '' && inputs.comment_user_login == github.repository_owner)
+      )
+
+    concurrency:
+      group: "pr-review-submit-${{ inputs.issue_number }}"
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout calling repo
+        uses: actions/checkout@v4
+
+      - name: Checkout pipeline scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.template_repo }}
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            scripts/check-autonomy-policy.sh
+          sparse-checkout-cone-mode: false
+          path: .pipeline-scripts
+
+      - name: Generate App token
+        id: app-token
+        if: inputs.pipeline_app_id != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ inputs.pipeline_app_id }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+
+      - name: Approve sensitive path change
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          mapfile -t CHANGED_FILES < <(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100" --paginate --jq '.[].filename')
+          if [ "${#CHANGED_FILES[@]}" -eq 0 ]; then
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+              "Cannot process \`/approve-sensitive\`: no changed files were found for this PR. Failing closed."
+            exit 0
+          fi
+
+          SENSITIVE_MATCH=false
+          BLOCKING_ACTION=""
+          BLOCKING_FILE=""
+          BLOCKING_REASON=""
+
+          for FILE in "${CHANGED_FILES[@]}"; do
+            [ -n "$FILE" ] || continue
+
+            for ACTION in policy_artifact_change workflow_file_change deploy_policy_change sensitive_app_change; do
+              MATCH_JSON=$(bash .pipeline-scripts/scripts/check-autonomy-policy.sh match "$ACTION" "$FILE" autonomy-policy.yml)
+              MATCHED=$(printf '%s' "$MATCH_JSON" | jq -r '.matched')
+              MODE=$(printf '%s' "$MATCH_JSON" | jq -r '.mode')
+
+              if [ "$MATCHED" = "true" ] && [ "$MODE" = "human_required" ]; then
+                if [ "$ACTION" = "sensitive_app_change" ]; then
+                  SENSITIVE_MATCH=true
+                else
+                  BLOCKING_ACTION="$ACTION"
+                  BLOCKING_FILE="$FILE"
+                  BLOCKING_REASON=$(printf '%s' "$MATCH_JSON" | jq -r '.requires_human_reason')
+                  break 2
+                fi
+              fi
+            done
+          done
+
+          if [ -n "$BLOCKING_ACTION" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+              "Cannot use \`/approve-sensitive\` here. This PR is blocked by \`${BLOCKING_ACTION}\` on \`${BLOCKING_FILE}\`. ${BLOCKING_REASON} Manual human review and merge are still required."
+            exit 0
+          fi
+
+          if [ "$SENSITIVE_MATCH" != "true" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+              "Cannot use \`/approve-sensitive\` here because no active \`sensitive_app_change\` policy match was found on this PR."
+            exit 0
+          fi
+
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+
+          # Set sensitive-review status to success
+          gh api --method POST "/repos/${REPO}/statuses/${HEAD_SHA}" \
+            -f state="success" \
+            -f context="sensitive-review" \
+            -f description="Sensitive path approved by @${{ inputs.comment_user_login }}"
+
+          # Re-enable auto-merge
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+          if [[ "$PR_TITLE" == "[Pipeline]"* ]] && [ -n "$MERGE_TOKEN" ]; then
+            GH_TOKEN="$MERGE_TOKEN" gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash || \
+              echo "::warning::Could not enable auto-merge"
+          fi
+
+          # Post confirmation
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+            "Sensitive path change approved by @${{ inputs.comment_user_login }}. Auto-merge re-enabled."
+          echo "Sensitive path approved for PR #${PR_NUMBER}"

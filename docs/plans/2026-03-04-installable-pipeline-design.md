@@ -56,6 +56,7 @@ prd-to-prod-template (central repo)
 │   │   ├── pipeline-deploy-router.yml.jinja
 │   │   ├── pipeline-arch-approve.yml.jinja
 │   │   ├── pipeline-close-issues.yml.jinja
+│   │   ├── pipeline-maintenance.yml.jinja
 │   │   ├── repo-assist.md.jinja         ← core agent definitions
 │   │   ├── pr-review-agent.md.jinja
 │   │   ├── prd-decomposer.md.jinja
@@ -90,6 +91,7 @@ target-repo (after installation)
 │   ├── pipeline-deploy-router.yml       ← thin caller
 │   ├── pipeline-arch-approve.yml        ← thin caller
 │   ├── pipeline-close-issues.yml        ← thin caller
+│   ├── pipeline-maintenance.yml         ← thin caller
 │   ├── repo-assist.md                   ← agent definitions (local)
 │   ├── repo-assist.lock.yml             ← compiled by gh aw
 │   ├── pr-review-agent.md
@@ -108,7 +110,6 @@ target-repo (after installation)
 │   ├── duplicate-code-detector.lock.yml
 │   ├── security-compliance.md
 │   ├── security-compliance.lock.yml
-│   ├── agentics-maintenance.yml         ← generated locally by gh aw compile
 │   ├── existing-ci.yml                  ← untouched (user's own)
 │   └── existing-deploy.yml              ← untouched
 ├── .deploy-profile
@@ -207,7 +208,6 @@ This works across orgs because the caller explicitly passes each secret — no `
 | File | Why local |
 |------|-----------|
 | Agent `.md` files (all 9: repo-assist, pr-review-agent, prd-decomposer, prd-planner, pipeline-status, ci-doctor, code-simplifier, duplicate-code-detector, security-compliance) | Agents read repo-specific context (AGENTS.md, codebase). Must be compiled locally by `gh aw compile`. Users may customize agent instructions. |
-| `agentics-maintenance.yml` | Generated locally by `gh aw compile` from the installed agent definitions. It is not a thin caller and stays coupled to the local gh-aw workflow set. |
 | `AGENTS.md` | Describes the target repo's codebase, build commands, coding standards. Completely repo-specific. |
 | `autonomy-policy.yml` | Defines what agents can/can't do. Varies by repo (sensitive dirs, app structure). |
 | `.deploy-profile` | Points to the repo's deployment target. |
