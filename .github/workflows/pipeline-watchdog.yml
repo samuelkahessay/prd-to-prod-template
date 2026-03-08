@@ -56,10 +56,25 @@ jobs:
           app-id: ${{ vars.PIPELINE_APP_ID }}
           private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
 
+      - name: Require pipeline App token for autonomous watchdog actions
+        if: steps.healing.outputs.skip != 'true'
+        env:
+          PIPELINE_APP_ID: ${{ vars.PIPELINE_APP_ID }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::PIPELINE_APP_ID is required for autonomous watchdog actions."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Watchdog cannot continue."
+            exit 1
+          fi
+
       - name: Check for stalled pipeline items
         if: steps.healing.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_AW_GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          GH_AW_GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: bash scripts/pipeline-watchdog.sh

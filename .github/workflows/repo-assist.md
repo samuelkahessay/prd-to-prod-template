@@ -31,6 +31,9 @@ network:
   - python
 
 safe-outputs:
+  github-app:
+    app-id: ${{ vars.PIPELINE_APP_ID }}
+    private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
   create-pull-request:
     draft: false
     title-prefix: "[Pipeline] "
@@ -41,6 +44,7 @@ safe-outputs:
     title-prefix: "[Pipeline] "
     max: 4
   add-comment:
+    discussions: false
     max: 10
     target: "*"
     hide-older-comments: true

@@ -28,8 +28,6 @@ on:
     secrets:
       PIPELINE_APP_PRIVATE_KEY:
         required: false
-      GH_AW_GITHUB_TOKEN:
-        required: false
 
 permissions:
   contents: read
@@ -119,11 +117,26 @@ jobs:
           app-id: ${{ inputs.pipeline_app_id }}
           private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
 
+      - name: Require pipeline App token for autonomous dispatch
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true'
+        env:
+          PIPELINE_APP_ID: ${{ inputs.pipeline_app_id }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::pipeline_app_id is required for autonomous dispatch."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Autonomous dispatch cannot continue with GITHUB_TOKEN."
+            exit 1
+          fi
+
       - name: Skip when repo-assist already active
         if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true'
         id: guard
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           ACTIVE_RUNS=$(gh run list --repo "$REPO" \
@@ -172,7 +185,7 @@ jobs:
         if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true' && steps.guard.outputs.skip != 'true'
         id: dispatch_repo_assist
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           DISPATCHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

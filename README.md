@@ -39,12 +39,13 @@ Click **"Use this template"** → **"Create a new repository"**.
 
 Clone your new repo locally.
 
-> **Important: First-Time Setup** — Agentic workflows (the `.md` files in
-> `.github/workflows/`) require compiled `.lock.yml` files to function as
-> GitHub Actions. Running `setup.sh` (Step 2 below) handles this automatically
-> by calling `scripts/bootstrap.sh`, which runs `gh aw compile`. If you push
-> code before running setup, workflows will not trigger. To fix this after the
-> fact, run `scripts/bootstrap.sh` or `gh aw compile` manually.
+> **Important: First-Time Setup** — Agent workflow sources (`*.md` in
+> `.github/workflows/`) must be compiled to `*.lock.yml` files before GitHub
+> Actions can run them. Infrastructure workflows (`*.yml`) are used directly
+> and need no compilation. Running `setup.sh` (Step 2 below) handles
+> compilation automatically via `gh aw compile`. If you push before running
+> setup, agent workflows will not trigger. To fix this after the fact, run
+> `scripts/bootstrap.sh` or `gh aw compile` manually.
 
 ### 2. Run setup
 
@@ -109,7 +110,7 @@ When CI fails on `main`, the pipeline:
 4. The review agent approves, auto-merge lands the fix
 5. Deploy runs on the green main branch
 
-This loop is autonomous — zero human intervention required.
+This loop can run end-to-end autonomously within configured policy — humans own the policy, not the individual steps.
 
 ## Authentication
 
@@ -124,6 +125,7 @@ Auto-rotating tokens scoped per job. No manual rotation needed.
 |--------|------|---------|
 | `PIPELINE_APP_ID` | Variable | App ID from the App settings page |
 | `PIPELINE_APP_PRIVATE_KEY` | Secret | PEM private key generated in App settings |
+| `PIPELINE_BOT_LOGIN` | Variable | Trusted App login for verdict comments (for example `prd-to-prod-pipeline`) |
 
 ### Option 2: Personal Access Token
 
@@ -147,6 +149,7 @@ with Contents, Issues, Pull requests, Actions, and Workflows permissions.
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `PIPELINE_HEALING_ENABLED` | No | Set to `false` to pause autonomous healing |
+| `PIPELINE_BOT_LOGIN` | Yes | Trusted App login that `pr-review-submit` accepts for verdict comments |
 
 ## Troubleshooting
 

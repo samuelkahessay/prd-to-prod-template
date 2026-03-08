@@ -58,6 +58,11 @@ on:
         required: false
         default: ""
         description: "github.repository_owner from caller"
+      pipeline_bot_login:
+        type: string
+        required: false
+        default: ""
+        description: "Trusted GitHub App bot login for verdict comments"
       issue_number:
         type: number
         required: false
@@ -86,8 +91,6 @@ on:
     secrets:
       PIPELINE_APP_PRIVATE_KEY:
         required: false
-      GH_AW_GITHUB_TOKEN:
-        required: false
 
 permissions:
   contents: write
@@ -111,6 +114,13 @@ jobs:
       contains(inputs.comment_body, 'gh-aw-agentic-workflow: Pipeline Review Agent') &&
       inputs.comment_user_login != '' &&
       (
+        (
+          inputs.pipeline_bot_login != '' &&
+          (
+            inputs.comment_user_login == inputs.pipeline_bot_login ||
+            inputs.comment_user_login == format('app/{0}', inputs.pipeline_bot_login)
+          )
+        ) ||
         (inputs.repository_owner != '' && inputs.comment_user_login == inputs.repository_owner) ||
         (inputs.repository_owner == '' && inputs.comment_user_login == github.repository_owner)
       )
@@ -372,17 +382,37 @@ jobs:
             -f description="Sensitive path change — awaiting /approve-sensitive from repo owner"
           echo "Set sensitive-review pending status on ${HEAD_SHA}"
 
+      - name: Require pipeline App token for autonomous merge
+        if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
+        env:
+          PIPELINE_APP_ID: ${{ inputs.pipeline_app_id }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_TITLE: ${{ steps.review.outputs.pr_title }}
+        run: |
+          if [[ "${PR_TITLE:-}" != "[Pipeline]"* ]]; then
+            echo "Non-pipeline PR — no App token required for auto-merge."
+            exit 0
+          fi
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::pipeline_app_id is required for pipeline auto-merge."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Pipeline auto-merge cannot continue."
+            exit 1
+          fi
+
       - name: Enable auto-merge (APPROVE only)
         if: steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
         env:
-          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ inputs.issue_number }}
           PR_TITLE: ${{ steps.review.outputs.pr_title }}
           REPO: ${{ github.repository }}
         run: |
           if [[ "$PR_TITLE" == "[Pipeline]"* ]]; then
             if [ -z "$MERGE_TOKEN" ]; then
-              echo "::error::GH_AW_GITHUB_TOKEN is required for pipeline auto-merge so downstream push workflows can run."
+              echo "::error::Pipeline GitHub App token is required for pipeline auto-merge so downstream workflows can run."
               exit 1
             fi
             GH_TOKEN="$MERGE_TOKEN" gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash || echo "::warning::Could not enable auto-merge"
@@ -430,8 +460,8 @@ jobs:
           fi
 
           # Poll for merge completion and close linked issues as a deterministic
-          # backstop. The merge itself uses GH_AW_GITHUB_TOKEN so downstream
-          # push/merge workflows can still fire normally.
+          # backstop. The merge itself uses the pipeline GitHub App token so
+          # downstream push/merge workflows can still fire normally.
           # Poll for merge completion (auto-merge typically completes within seconds).
           MERGED=false
           for i in $(seq 1 24); do
@@ -517,10 +547,25 @@ jobs:
               echo "::warning::Could not close PR #${DUP}"
           done
 
+      - name: Require pipeline App token for autonomous follow-up
+        if: always() && steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict != '' && steps.healing.outputs.enabled == 'true'
+        env:
+          PIPELINE_APP_ID: ${{ inputs.pipeline_app_id }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::pipeline_app_id is required for autonomous follow-up after review submission."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Autonomous follow-up cannot continue."
+            exit 1
+          fi
+
       - name: Dispatch repo-assist for next cycle
         if: always() && steps.idempotency.outputs.skip != 'true' && steps.review.outputs.verdict != '' && steps.healing.outputs.enabled == 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
           REVIEW_SUMMARY: ${{ steps.review.outputs.summary }}
           PR_NUMBER: ${{ inputs.issue_number }}
@@ -814,10 +859,32 @@ jobs:
             -f description="Sensitive path change — awaiting /approve-sensitive from repo owner"
           echo "Set sensitive-review pending status on ${HEAD_SHA}"
 
+      - name: Require pipeline App token for autonomous merge
+        if: always() && inputs.manual_verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
+        env:
+          PIPELINE_APP_ID: ${{ inputs.pipeline_app_id }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ inputs.manual_pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+          if [[ "$PR_TITLE" != "[Pipeline]"* ]]; then
+            echo "Non-pipeline PR — no App token required for auto-merge."
+            exit 0
+          fi
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::pipeline_app_id is required for pipeline auto-merge."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Pipeline auto-merge cannot continue."
+            exit 1
+          fi
+
       - name: Enable auto-merge (APPROVE only)
         if: always() && inputs.manual_verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
         env:
-          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ inputs.manual_pr_number }}
           REPO: ${{ github.repository }}
         run: |
@@ -825,7 +892,7 @@ jobs:
 
           if [[ "$PR_TITLE" == "[Pipeline]"* ]]; then
             if [ -z "$MERGE_TOKEN" ]; then
-              echo "::error::GH_AW_GITHUB_TOKEN is required for pipeline auto-merge so downstream push workflows can run."
+              echo "::error::Pipeline GitHub App token is required for pipeline auto-merge so downstream workflows can run."
               exit 1
             fi
             GH_TOKEN="$MERGE_TOKEN" gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash || echo "::warning::Could not enable auto-merge"
@@ -976,10 +1043,25 @@ jobs:
               echo "::warning::Could not close PR #${DUP}"
           done
 
+      - name: Require pipeline App token for autonomous follow-up
+        if: always() && steps.healing.outputs.enabled == 'true'
+        env:
+          PIPELINE_APP_ID: ${{ inputs.pipeline_app_id }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::pipeline_app_id is required for autonomous follow-up after review submission."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Autonomous follow-up cannot continue."
+            exit 1
+          fi
+
       - name: Dispatch repo-assist for next cycle
         if: always() && steps.healing.outputs.enabled == 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
           INPUT_VERDICT: ${{ inputs.manual_verdict }}
           REVIEW_SUMMARY: ${{ inputs.manual_summary }}
@@ -1078,7 +1160,8 @@ jobs:
       - name: Approve sensitive path change
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          MERGE_TOKEN: ${{ steps.app-token.outputs.token }}
+          PIPELINE_APP_ID: ${{ inputs.pipeline_app_id }}
           PR_NUMBER: ${{ inputs.issue_number }}
           REPO: ${{ github.repository }}
         run: |
@@ -1137,7 +1220,15 @@ jobs:
 
           # Re-enable auto-merge
           PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
-          if [[ "$PR_TITLE" == "[Pipeline]"* ]] && [ -n "$MERGE_TOKEN" ]; then
+          if [[ "$PR_TITLE" == "[Pipeline]"* ]]; then
+            if [ -z "${PIPELINE_APP_ID:-}" ]; then
+              echo "::error::pipeline_app_id is required to re-enable auto-merge after /approve-sensitive."
+              exit 1
+            fi
+            if [ -z "$MERGE_TOKEN" ]; then
+              echo "::error::GitHub App token generation failed. Cannot re-enable auto-merge after /approve-sensitive."
+              exit 1
+            fi
             GH_TOKEN="$MERGE_TOKEN" gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash || \
               echo "::warning::Could not enable auto-merge"
           fi

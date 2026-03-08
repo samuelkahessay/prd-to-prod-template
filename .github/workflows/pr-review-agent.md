@@ -10,6 +10,9 @@ on:
     types: [opened, synchronize, ready_for_review]
   workflow_dispatch:
 
+bots:
+  - prd-to-prod-pipeline[bot]
+
 timeout-minutes: 15
 
 engine:
@@ -21,7 +24,11 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  github-app:
+    app-id: ${{ vars.PIPELINE_APP_ID }}
+    private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
   add-comment:
+    discussions: false
     max: 3
     target: "*"
     hide-older-comments: true

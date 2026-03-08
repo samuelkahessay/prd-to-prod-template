@@ -21,11 +21,14 @@ permissions: read-all
 network: defaults
 
 safe-outputs:
+  github-app:
+    app-id: ${{ vars.PIPELINE_APP_ID }}
+    private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
   create-issue:
     title-prefix: "[Pipeline] "
-    labels: [pipeline]
     max: 20
   add-comment:
+    discussions: false
     max: 5
   add-labels:
     allowed: [feature, test, infra, docs, bug, pipeline, blocked, ready]
@@ -92,11 +95,20 @@ If the instructions above contain a URL or file path, fetch/read that content as
 
 8. **Create issues in dependency order:** infrastructure first, then core features, then dependent features, then tests/docs last.
 
-9. **Use valid `temporary_id` values** for cross-referencing issues. Format: `aw_` + 3-8 alphanumeric chars (A-Za-z0-9 only). Use short codes like `aw_task1`, `aw_task2`, `aw_feat01`. Do NOT use `aw_create_task` or `aw_scaffold_project`. Reference dependencies with `#aw_task1` syntax.
+9. **Use valid `temporary_id` values** for cross-referencing issues. Format: `aw_` + 3-12 alphanumeric chars (A-Za-z0-9 only). The suffix after `aw_` must be at least 3 characters long. Use compact IDs like `aw_api01`, `aw_ui001`, `aw_data1`, `aw_web07`. Do NOT use invalid IDs such as `aw_ui`, `aw_db`, `aw_create_task`, or `aw_scaffold_project`. Reference dependencies with `#aw_api01` syntax.
 
 10. **Self-contained acceptance criteria.** Each issue's acceptance criteria must ONLY reference files, functions, and artifacts that will be created or modified IN THAT ISSUE. Do not include criteria that depend on artifacts from other issues — those belong on the issue that creates the artifact. If a feature spans multiple issues, each issue's criteria cover only its portion.
 
 11. **Self-contained does not mean weaker.** If a PRD requirement belongs to this issue, preserve it exactly even when you rewrite it into issue-local language. Duplicate the exact contractual detail into this issue's traceability and acceptance criteria rather than replacing it with a looser summary.
+
+12. **Fail closed on safe-output mismatches.** Do not post a success summary, do not add the `pipeline` label, and do not dispatch `repo-assist` unless every planned `create_issue` succeeds, every `#aw_*` dependency placeholder resolves to a created issue, and the final summary table can be rendered with actual GitHub issue numbers only.
+
+13. **Reconciliation is mandatory.** Before any follow-up action, confirm all of the following:
+   - The number of planned tasks equals the number of successful `create_issue` operations
+   - Every unique `aw_*` placeholder referenced in dependency lists or the summary table has a matching created issue mapping
+   - The summary table contains only resolved GitHub issue numbers like `#12`, never guessed sequence numbers like `#1`, `#2`, or unresolved placeholders such as `#aw_ui001`
+
+14. **Delay pipeline activation until reconciliation succeeds.** Create the issues first with exactly one type label (`feature`, `test`, `infra`, `docs`, or `bug`). Add the `pipeline` label only after reconciliation succeeds, using `add_labels` on the resolved issue numbers. This prevents partial decomposition from entering the implementation lane.
 
 ## Architecture-Aware Decomposition
 
@@ -176,20 +188,24 @@ Before creating issues, determine the target tech stack and deploy profile:
 
 After creating all issues:
 
-1. **Dispatch the `repo-assist` workflow** to begin implementation automatically.
-2. Post a summary comment on the original issue/discussion with:
+1. **Reconcile the batch**. Verify that the planned task count matches the successful issue-creation count and that every `aw_*` placeholder used in dependencies has a created issue mapping.
+2. **Add the `pipeline` label** to each successfully created issue only after reconciliation succeeds.
+3. **Dispatch the `repo-assist` workflow** only after the labels are applied successfully.
+4. Post a summary comment on the original issue/discussion with:
 
 ```
 ## Pipeline Tasks Created
 
 | # | Title | Type | Depends On |
 |---|-------|------|------------|
-| #1 | ... | infra | — |
-| #2 | ... | feature | #aw_task1 |
+| #12 | ... | infra | — |
+| #13 | ... | feature | #12 |
 ...
 
 Total: N issues created. Implementation starting automatically.
 ```
+
+If you cannot render this table with real issue numbers only, stop and report the decomposition failure instead of posting the success comment.
 
 ## Quality Checklist
 
@@ -201,4 +217,6 @@ Before creating each issue, verify:
 - [ ] Dependencies are accurate
 - [ ] Technical notes reference actual project patterns
 - [ ] Issue is small enough for a single PR
-- [ ] temporary_id is `aw_` + 3-8 alphanumeric chars only (e.g., `aw_task1`)
+- [ ] temporary_id is `aw_` + 3-12 alphanumeric chars only with a 3+ character suffix (e.g., `aw_api01`)
+- [ ] Planned issue count matches successful `create_issue` count
+- [ ] Every `aw_*` placeholder in dependencies and the summary has a created issue mapping

@@ -26,10 +26,24 @@ jobs:
           app-id: ${{ vars.PIPELINE_APP_ID }}
           private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
 
+      - name: Require pipeline App token for architecture approval
+        env:
+          PIPELINE_APP_ID: ${{ vars.PIPELINE_APP_ID }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::PIPELINE_APP_ID is required for architecture approval automation."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Architecture approval cannot continue."
+            exit 1
+          fi
+
       - name: Verify author has write access
         id: check-access
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           PERM=$(gh api repos/${{ github.repository }}/collaborators/${{ github.event.comment.user.login }}/permission \
             --jq '.permission' 2>/dev/null || echo "none")
@@ -41,7 +55,7 @@ jobs:
 
       - name: Swap labels
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh issue edit ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
@@ -50,7 +64,7 @@ jobs:
 
       - name: Post approval confirmation
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh issue comment ${{ github.event.issue.number }} \
             --repo ${{ github.repository }} \
@@ -58,7 +72,7 @@ jobs:
 
       - name: Dispatch prd-decomposer
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh workflow run prd-decomposer.lock.yml \
             --repo ${{ github.repository }} \

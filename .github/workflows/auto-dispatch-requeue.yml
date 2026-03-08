@@ -46,11 +46,26 @@ jobs:
           app-id: ${{ vars.PIPELINE_APP_ID }}
           private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
 
+      - name: Require pipeline App token for autonomous requeue
+        if: steps.healing.outputs.skip != 'true'
+        env:
+          PIPELINE_APP_ID: ${{ vars.PIPELINE_APP_ID }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::PIPELINE_APP_ID is required for autonomous requeue."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Autonomous requeue cannot continue."
+            exit 1
+          fi
+
       - name: Re-dispatch deferred actionable issue
         if: steps.healing.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_AW_GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GH_AW_GITHUB_TOKEN }}
+          GH_AW_GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -85,11 +100,6 @@ jobs:
           ACTIVE_COUNT=$(printf '%s' "$ACTIVE_RUNS" | jq 'length')
           if [ "$ACTIVE_COUNT" -gt 0 ]; then
             echo "repo-assist is already active (${ACTIVE_COUNT} run(s)); nothing to requeue."
-            exit 0
-          fi
-
-          if [ -z "${GH_AW_GITHUB_TOKEN:-}" ]; then
-            echo "::warning::GH_AW_GITHUB_TOKEN is unavailable; cannot re-dispatch via workflow_dispatch."
             exit 0
           fi
 
