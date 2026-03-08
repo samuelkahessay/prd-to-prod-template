@@ -26,7 +26,7 @@
 # Also maintains its own PRs by fixing CI failures and resolving merge conflicts.
 # Can be triggered on-demand via /repo-assist <instructions>.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"b4b08a39ea500a3be2866b3b0e1b656feb29c84882f160319f4f9e127585aeaf","compiler_version":"v0.52.1"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"ef393c32e2be04e46f2b0feac10f7ae7a7549e258eed2385c5018a1a9ecbbc7b","compiler_version":"v0.52.1"}
 
 name: "Pipeline Repo Assist"
 "on":
@@ -58,13 +58,17 @@ name: "Pipeline Repo Assist"
     - edited
   schedule:
   - cron: "36 16 * * *"
-  workflow_dispatch: null
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue number to implement directly. Leave empty for backlog mode.
+        required: false
 
 permissions: {}
 
 concurrency:
   cancel-in-progress: true
-  group: gh-aw-${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number || github.event_name }}
+  group: gh-aw-${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.inputs.issue_number || github.event_name }}
 
 run-name: "Pipeline Repo Assist"
 
@@ -169,7 +173,9 @@ jobs:
           GH_AW_GITHUB_ACTOR: ${{ github.actor }}
           GH_AW_GITHUB_EVENT_COMMENT_ID: ${{ github.event.comment.id }}
           GH_AW_GITHUB_EVENT_DISCUSSION_NUMBER: ${{ github.event.discussion.number }}
+          GH_AW_GITHUB_EVENT_INPUTS_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
           GH_AW_GITHUB_EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GH_AW_GITHUB_EVENT_NAME: ${{ github.event_name }}
           GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
           GH_AW_GITHUB_RUN_ID: ${{ github.run_id }}
@@ -238,6 +244,8 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_PROMPT: /tmp/gh-aw/aw-prompts/prompt.txt
+          GH_AW_GITHUB_EVENT_INPUTS_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          GH_AW_GITHUB_EVENT_NAME: ${{ github.event_name }}
           GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
           GH_AW_STEPS_SANITIZED_OUTPUTS_TEXT: ${{ steps.sanitized.outputs.text }}
         with:
@@ -253,7 +261,9 @@ jobs:
           GH_AW_GITHUB_ACTOR: ${{ github.actor }}
           GH_AW_GITHUB_EVENT_COMMENT_ID: ${{ github.event.comment.id }}
           GH_AW_GITHUB_EVENT_DISCUSSION_NUMBER: ${{ github.event.discussion.number }}
+          GH_AW_GITHUB_EVENT_INPUTS_ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
           GH_AW_GITHUB_EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GH_AW_GITHUB_EVENT_NAME: ${{ github.event_name }}
           GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
           GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
           GH_AW_GITHUB_RUN_ID: ${{ github.run_id }}
@@ -281,7 +291,9 @@ jobs:
                 GH_AW_GITHUB_ACTOR: process.env.GH_AW_GITHUB_ACTOR,
                 GH_AW_GITHUB_EVENT_COMMENT_ID: process.env.GH_AW_GITHUB_EVENT_COMMENT_ID,
                 GH_AW_GITHUB_EVENT_DISCUSSION_NUMBER: process.env.GH_AW_GITHUB_EVENT_DISCUSSION_NUMBER,
+                GH_AW_GITHUB_EVENT_INPUTS_ISSUE_NUMBER: process.env.GH_AW_GITHUB_EVENT_INPUTS_ISSUE_NUMBER,
                 GH_AW_GITHUB_EVENT_ISSUE_NUMBER: process.env.GH_AW_GITHUB_EVENT_ISSUE_NUMBER,
+                GH_AW_GITHUB_EVENT_NAME: process.env.GH_AW_GITHUB_EVENT_NAME,
                 GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: process.env.GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER,
                 GH_AW_GITHUB_REPOSITORY: process.env.GH_AW_GITHUB_REPOSITORY,
                 GH_AW_GITHUB_RUN_ID: process.env.GH_AW_GITHUB_RUN_ID,
@@ -1147,9 +1159,17 @@ jobs:
       - name: Check if detection needed
         id: detection_guard
         if: always()
+        env:
+          OUTPUT_TYPES: ${{ steps.collect_output.outputs.output_types }}
+          HAS_PATCH: ${{ steps.collect_output.outputs.has_patch }}
         run: |
-          echo "run_detection=false" >> "$GITHUB_OUTPUT"
-          echo "Threat detection temporarily disabled pending awf api-proxy container collision fix"
+          if [[ -n "$OUTPUT_TYPES" || "$HAS_PATCH" == "true" ]]; then
+            echo "run_detection=true" >> "$GITHUB_OUTPUT"
+            echo "Detection will run: output_types=$OUTPUT_TYPES, has_patch=$HAS_PATCH"
+          else
+            echo "run_detection=false" >> "$GITHUB_OUTPUT"
+            echo "Detection skipped: no agent outputs or patches to analyze"
+          fi
       - name: Clear MCP configuration for detection
         if: always() && steps.detection_guard.outputs.run_detection == 'true'
         run: |

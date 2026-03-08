@@ -1,0 +1,97 @@
+name: Activate Decomposed Issues
+
+on:
+  workflow_run:
+    workflows: ["PRD Decomposer"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "PRD Decomposer run ID"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: activate-decomposed-issues-${{ github.event.workflow_run.id || inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Generate App token
+        id: app-token
+        if: vars.PIPELINE_APP_ID != ''
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.PIPELINE_APP_ID }}
+          private-key: ${{ secrets.PIPELINE_APP_PRIVATE_KEY }}
+          permission-actions: read
+          permission-contents: read
+          permission-issues: write
+
+      - name: Require pipeline App token for activation
+        env:
+          PIPELINE_APP_ID: ${{ vars.PIPELINE_APP_ID }}
+          PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "${PIPELINE_APP_ID:-}" ]; then
+            echo "::error::PIPELINE_APP_ID is required for decomposer activation."
+            exit 1
+          fi
+          if [ -z "${PIPELINE_APP_TOKEN:-}" ]; then
+            echo "::error::GitHub App token generation failed. Decomposer activation cannot continue."
+            exit 1
+          fi
+
+      - name: Download safe-output manifest
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/activate-decomposed-issues
+          gh run download "$RUN_ID" \
+            --repo "$REPO" \
+            --name safe-output-items \
+            --dir /tmp/activate-decomposed-issues
+
+      - name: Apply pipeline labels to created child issues
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          MANIFEST=/tmp/activate-decomposed-issues/safe-output-items.jsonl
+          if [ ! -f "$MANIFEST" ]; then
+            echo "::error::safe-output-items manifest was not downloaded."
+            exit 1
+          fi
+
+          mapfile -t CREATED_ISSUES < <(
+            jq -r 'select(.type == "create_issue" and (.number // 0) > 0) | .number' "$MANIFEST" | sort -n -u
+          )
+
+          if [ "${#CREATED_ISSUES[@]}" -eq 0 ]; then
+            echo "No created issues found in manifest."
+            exit 0
+          fi
+
+          for issue_number in "${CREATED_ISSUES[@]}"; do
+            gh issue edit "$issue_number" --repo "$REPO" --add-label pipeline >/dev/null
+
+            ISSUE_LABELS=$(gh issue view "$issue_number" --repo "$REPO" --json labels --jq '[.labels[].name]')
+            if ! printf '%s' "$ISSUE_LABELS" | jq -e 'index("pipeline") != null' >/dev/null; then
+              echo "::error::Issue #${issue_number} is missing the pipeline label after activation."
+              exit 1
+            fi
+          done

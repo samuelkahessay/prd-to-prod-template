@@ -8,12 +8,16 @@ description: |
 on:
   schedule: daily
   workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to implement directly. Leave empty for backlog mode."
+        required: false
   slash_command:
     name: repo-assist
   reaction: "eyes"
 
 concurrency:
-  group: "gh-aw-${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number || github.event_name }}"
+  group: "gh-aw-${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.inputs.issue_number || github.event_name }}"
   cancel-in-progress: true
 
 timeout-minutes: 60
@@ -129,6 +133,16 @@ In CI Repair Command Mode:
 
 If the instructions are non-empty and do **not** contain `ci-repair-command:v1`, follow the user's instructions instead of the normal workflow. Apply all the same guidelines (read AGENTS.md, run tests, use AI disclosure). If the issue's requirements are already satisfied by merged code, close the issue with a comment referencing the PR that resolved it — do not create a new PR. Skip the scheduled workflow and directly do what was requested. Then exit.
 
+### Targeted Issue Dispatch Mode
+
+If `${{ github.event_name }}` is `workflow_dispatch` and `${{ github.event.inputs.issue_number }}` is non-empty, this run is bound to issue `#${{ github.event.inputs.issue_number }}`.
+
+In Targeted Issue Dispatch Mode:
+- Treat issue `#${{ github.event.inputs.issue_number }}` as the only candidate for Task 1 in this run.
+- Fetch that issue directly instead of scanning the backlog to choose a task.
+- If the issue is closed, missing, non-actionable, or still blocked by dependencies, exit without substituting a different issue.
+- Do not rotate to unrelated implementation tasks in this run. After the targeted issue path completes, you may still perform Task 5 and Task 6.
+
 ## Architecture Context
 
 Before implementing any issue, check if an architecture plan exists:
@@ -220,11 +234,13 @@ Each checkpoint value is a JSON string:
 
 Each run, work on 2-5 tasks from the list below. Use round-robin scheduling based on memory. Always do Task 5 (status update) and Task 6 (agentic workflow failure triage).
 
+If Targeted Issue Dispatch Mode is active, Task 1 must operate only on issue `#${{ github.event.inputs.issue_number }}`. Do not substitute another implementation issue in that run.
+
 ### Task 1: Implement Issues as Pull Requests
 
-1. List open issues labeled `pipeline` + (`feature`, `test`, `infra`, `docs`, or `bug`), and include each issue body in the data you inspect.
+1. If `${{ github.event.inputs.issue_number }}` is non-empty, fetch only issue `#${{ github.event.inputs.issue_number }}` and include its body in the data you inspect. Otherwise list open issues labeled `pipeline` + (`feature`, `test`, `infra`, `docs`, or `bug`), and include each issue body in the data you inspect.
 2. Before dependency sorting, exclude root PRD/decomposition parent issues. If an issue body starts with `# PRD:`, treat it as non-implementable coordination state and skip it silently. Never create a PR directly from a root PRD issue, even if it has `pipeline` and a type label.
-3. Sort the remaining issues by dependency order — skip issues whose dependencies (referenced in issue body) are not yet closed.
+3. Sort the remaining issues by dependency order — skip issues whose dependencies (referenced in issue body) are not yet closed. In Targeted Issue Dispatch Mode, if the targeted issue is blocked, stop and exit instead of choosing a different issue.
 4. For each implementable issue (check memory — skip if already attempted):
    a. Read the issue carefully, including acceptance criteria, `## PRD Traceability`, and technical notes. Then apply the **PRD Fidelity Protocol** before making any code changes.
    a1. If the issue body starts with `# PRD:`, stop immediately and skip it as a decomposition parent/root PRD issue.

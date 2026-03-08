@@ -397,7 +397,7 @@ while IFS= read -r ISSUE_ROW; do
   fi
 
   echo "Dispatching repo-assist for orphaned issue #${ISSUE_NUM}"
-  gh workflow run repo-assist.lock.yml --repo "$REPO" || \
+  gh workflow run repo-assist.lock.yml --repo "$REPO" -f issue_number="$ISSUE_NUM" || \
     echo "::warning::Could not dispatch repo-assist"
   ACTIONS_TAKEN=$((ACTIONS_TAKEN + 1))
   break

@@ -30,9 +30,6 @@ safe-outputs:
   add-comment:
     discussions: false
     max: 5
-  add-labels:
-    allowed: [feature, test, infra, docs, bug, pipeline, blocked, ready]
-    max: 40
 
 tools:
   bash: true
@@ -98,14 +95,14 @@ If the instructions above contain a URL or file path, fetch/read that content as
 
 11. **Self-contained does not mean weaker.** If a PRD requirement belongs to this issue, preserve it exactly even when you rewrite it into issue-local language. Duplicate the exact contractual detail into this issue's traceability and acceptance criteria rather than replacing it with a looser summary.
 
-12. **Fail closed on safe-output mismatches.** Do not post a success summary and do not add the `pipeline` label unless every planned `create_issue` succeeds, every `#aw_*` dependency placeholder resolves to a created issue, and the final summary table can be rendered with actual GitHub issue numbers only.
+12. **Fail closed on safe-output mismatches.** Do not post a success summary unless every planned `create_issue` succeeds, every `#aw_*` dependency placeholder resolves to a created issue, and the final summary table can be rendered with actual GitHub issue numbers only.
 
 13. **Reconciliation is mandatory.** Before any follow-up action, confirm all of the following:
    - The number of planned tasks equals the number of successful `create_issue` operations
    - Every unique `aw_*` placeholder referenced in dependency lists or the summary table has a matching created issue mapping
    - The summary table contains only resolved GitHub issue numbers like `#12`, never guessed sequence numbers like `#1`, `#2`, or unresolved placeholders such as `#aw_ui001`
 
-14. **Delay pipeline activation until reconciliation succeeds.** Create the issues first with exactly one type label (`feature`, `test`, `infra`, `docs`, or `bug`). Add the `pipeline` label only after reconciliation succeeds, using `add_labels` with `item_number` set to each resolved child issue number. Never omit `item_number`, and never add labels to the source PRD issue/discussion. This prevents partial decomposition from entering the implementation lane.
+14. **Delay pipeline activation until reconciliation succeeds.** Create the issues first with exactly one type label (`feature`, `test`, `infra`, `docs`, or `bug`). Do not emit `add_labels` safe outputs for the child issues. The workflow will apply the `pipeline` label to the successfully created child issues after safe-output processing using the created issue manifest. Never add labels to the source PRD issue/discussion.
 
 15. **Do not dispatch `repo-assist` from this workflow.** Successful `pipeline` labeling on the created child issues will trigger the auto-dispatch lane. If any child issue cannot be labeled correctly, stop and report the failure instead of trying a fallback activation path.
 
@@ -188,9 +185,9 @@ Before creating issues, determine the target tech stack and deploy profile:
 After creating all issues:
 
 1. **Reconcile the batch**. Verify that the planned task count matches the successful issue-creation count and that every `aw_*` placeholder used in dependencies has a created issue mapping.
-2. **Add the `pipeline` label** to each successfully created child issue only after reconciliation succeeds, using `add_labels` with an explicit `item_number` for that child issue.
-3. **Do not call `dispatch_workflow`.** Auto-dispatch starts from the child issues after the labels are applied successfully.
-4. Post a summary comment on the original issue/discussion only after all child `pipeline` labels were applied successfully:
+2. **Do not emit `add_labels` safe outputs.** The workflow will apply the `pipeline` label to each successfully created child issue after safe-output processing.
+3. **Do not call `dispatch_workflow`.** Auto-dispatch starts from the child issues after the workflow applies the labels successfully.
+4. Post a summary comment on the original issue/discussion after the issue batch has been reconciled:
 
 ```
 ## Pipeline Tasks Created
@@ -201,10 +198,10 @@ After creating all issues:
 | #13 | ... | feature | #12 |
 ...
 
-Total: N issues created. Implementation starting automatically from the child issues.
+Total: N issues created. Child issue activation runs in a follow-up workflow after this batch is reconciled.
 ```
 
-If you cannot render this table with real issue numbers only, or if any child issue failed to receive its `pipeline` label, stop and report the decomposition failure instead of posting the success comment.
+If you cannot render this table with real issue numbers only, stop and report the decomposition failure instead of posting the success comment.
 
 ## Quality Checklist
 

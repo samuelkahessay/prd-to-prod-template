@@ -193,10 +193,12 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
           DISPATCHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           gh workflow run repo-assist.lock.yml \
-            --repo "$REPO"
+            --repo "$REPO" \
+            -f issue_number="$ISSUE_NUMBER"
 
           REPO_ASSIST_RUN_ID=""
           REPO_ASSIST_RUN_URL=""

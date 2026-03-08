@@ -188,7 +188,8 @@ jobs:
           echo "Re-dispatching issue #${SELECTED_ISSUE}."
           DISPATCHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           GH_TOKEN="$GH_AW_GITHUB_TOKEN" gh workflow run repo-assist.lock.yml \
-            --repo "$REPO"
+            --repo "$REPO" \
+            -f issue_number="$SELECTED_ISSUE"
 
           REPO_ASSIST_RUN_ID=""
           REPO_ASSIST_RUN_URL=""
