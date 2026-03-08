@@ -9,9 +9,8 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review]
   workflow_dispatch:
-
-bots:
-  - prd-to-prod-pipeline[bot]
+  bots:
+    - prd-to-prod-pipeline[bot]
 
 timeout-minutes: 15
 

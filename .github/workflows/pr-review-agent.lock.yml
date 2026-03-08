@@ -26,10 +26,12 @@
 # review verdict. Posts the verdict as a PR comment for pr-review-submit.yml
 # to act on.
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"a61459879bc4989284de8781a70e210b9089f122db646a2040ebe98fb29275cf","compiler_version":"v0.52.1"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"660b79fd002aaf56bca1baf7341494d0b91ee51b60f02a8555df1d6797b5e643","compiler_version":"v0.52.1"}
 
 name: "Pipeline Review Agent"
 "on":
+  # bots: # Bots processed as bot check in pre-activation job
+  # - prd-to-prod-pipeline[bot] # Bots processed as bot check in pre-activation job
   pull_request:
     types:
     - opened
@@ -116,6 +118,8 @@ jobs:
       - name: Compute current body text
         id: sanitized
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          GH_AW_ALLOWED_BOTS: prd-to-prod-pipeline[bot]
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -1029,6 +1033,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_REQUIRED_ROLES: admin,maintainer,write
+          GH_AW_ALLOWED_BOTS: prd-to-prod-pipeline[bot]
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
