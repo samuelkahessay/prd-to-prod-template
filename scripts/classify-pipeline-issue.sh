@@ -21,6 +21,9 @@ if ! has_label "pipeline"; then
 elif [ "$TITLE" = "[Pipeline] Status" ]; then
   ACTIONABLE=false
   REASON="status_issue"
+elif ! printf '%s' "$BODY" | grep -q '[^[:space:]]'; then
+  ACTIONABLE=false
+  REASON="missing_issue_body"
 elif printf '%s\n' "$BODY" | grep -Eq '^# PRD:'; then
   ACTIONABLE=false
   REASON="prd_parent_issue"

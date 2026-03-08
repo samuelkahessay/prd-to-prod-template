@@ -361,7 +361,7 @@ done < <(printf '%s' "$PIPELINE_PRS" | jq -c '.[]')
 
 echo ""
 echo "=== Checking for orphaned issues ==="
-PIPELINE_ISSUES=$(gh issue list --repo "$REPO" --label pipeline --state open --json number,title,updatedAt,labels)
+PIPELINE_ISSUES=$(gh issue list --repo "$REPO" --label pipeline --state open --json number,title,body,updatedAt,labels)
 LINKED_ISSUES=$(printf '%s' "$PIPELINE_PRS" | jq -r '.[].number' | while read -r PR_N; do
   [ -z "$PR_N" ] && continue
   gh pr view "$PR_N" --repo "$REPO" --json body \

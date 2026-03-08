@@ -1147,17 +1147,9 @@ jobs:
       - name: Check if detection needed
         id: detection_guard
         if: always()
-        env:
-          OUTPUT_TYPES: ${{ steps.collect_output.outputs.output_types }}
-          HAS_PATCH: ${{ steps.collect_output.outputs.has_patch }}
         run: |
-          if [[ -n "$OUTPUT_TYPES" || "$HAS_PATCH" == "true" ]]; then
-            echo "run_detection=true" >> "$GITHUB_OUTPUT"
-            echo "Detection will run: output_types=$OUTPUT_TYPES, has_patch=$HAS_PATCH"
-          else
-            echo "run_detection=false" >> "$GITHUB_OUTPUT"
-            echo "Detection skipped: no agent outputs or patches to analyze"
-          fi
+          echo "run_detection=false" >> "$GITHUB_OUTPUT"
+          echo "Threat detection temporarily disabled pending awf api-proxy container collision fix"
       - name: Clear MCP configuration for detection
         if: always() && steps.detection_guard.outputs.run_detection == 'true'
         run: |
@@ -1652,4 +1644,3 @@ jobs:
           name: safe-output-items
           path: /tmp/safe-output-items.jsonl
           if-no-files-found: warn
-

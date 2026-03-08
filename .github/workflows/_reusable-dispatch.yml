@@ -21,6 +21,10 @@ on:
       issue_title:
         type: string
         required: true
+      issue_body:
+        type: string
+        required: false
+        default: ""
       issue_labels:
         type: string
         required: true
@@ -85,14 +89,16 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           ISSUE_TITLE: ${{ inputs.issue_title }}
+          ISSUE_BODY: ${{ inputs.issue_body }}
           ISSUE_LABELS_JSON: ${{ inputs.issue_labels }}
         run: |
           # Build issue JSON with label objects from label name array
           ISSUE_JSON=$(jq -n \
             --argjson number "$ISSUE_NUMBER" \
             --arg title "$ISSUE_TITLE" \
+            --arg body "$ISSUE_BODY" \
             --argjson label_names "$ISSUE_LABELS_JSON" \
-            '{number: $number, title: $title, labels: [$label_names[] | {name: .}]}')
+            '{number: $number, title: $title, body: $body, labels: [$label_names[] | {name: .}]}')
           CLASSIFICATION=$(printf '%s' "$ISSUE_JSON" | .pipeline-scripts/scripts/classify-pipeline-issue.sh)
           ACTIONABLE=$(printf '%s' "$CLASSIFICATION" | jq -r '.actionable')
           REASON=$(printf '%s' "$CLASSIFICATION" | jq -r '.reason')
