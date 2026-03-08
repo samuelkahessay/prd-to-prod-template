@@ -1,10 +1,11 @@
 #
-# Deploy to Vercel — Builds and deploys a Next.js app to Vercel.
-# Called by deploy-router.yml when the active profile is nextjs-vercel.
+# Deploy to Vercel — Builds and deploys to Vercel.
+# Works for Express/Node.js APIs (api/index.ts) and Next.js apps.
+# Called by deploy-router.yml when the active profile matches *-vercel.
 #
 # Prerequisites:
-#   - VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID secrets
-#   - Vercel project linked to the repo
+#   - VERCEL_TOKEN, VERCEL_ORG_ID secrets
+#   - vercel.json in repo root
 #
 
 name: Deploy to Vercel
@@ -23,15 +24,15 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: studio
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts 2>/dev/null || npm install
 
       - name: Install Vercel CLI
         run: npm install -g vercel
@@ -40,7 +41,6 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
 
       - name: Build
@@ -51,4 +51,6 @@ jobs:
       - name: Deploy
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
+          echo "Deployed to: $URL"

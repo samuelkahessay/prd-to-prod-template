@@ -50,7 +50,10 @@ jobs:
 
   deploy-vercel:
     needs: detect-profile
-    if: needs.detect-profile.outputs.profile == 'nextjs-vercel'
+    if: >-
+      needs.detect-profile.outputs.profile == 'nextjs-vercel' ||
+      needs.detect-profile.outputs.profile == 'express-vercel' ||
+      needs.detect-profile.outputs.profile == 'node-vercel'
     uses: ./.github/workflows/deploy-vercel.yml
     secrets: inherit
 
