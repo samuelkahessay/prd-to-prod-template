@@ -14,7 +14,19 @@ name: Deploy to Vercel
 
 on:
   workflow_call:
+    inputs:
+      working-directory:
+        description: Working directory containing the Vercel project
+        required: false
+        type: string
+        default: .
   workflow_dispatch:
+    inputs:
+      working-directory:
+        description: Working directory containing the Vercel project
+        required: false
+        type: string
+        default: .
 
 permissions:
   contents: read
@@ -36,21 +48,26 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
+        working-directory: ${{ inputs.working-directory }}
         run: npm ci --ignore-scripts 2>/dev/null || npm install
 
       - name: Install Vercel CLI
         run: npm install -g vercel
 
       - name: Link Vercel project
+        working-directory: ${{ inputs.working-directory }}
         run: vercel link --yes --token=$VERCEL_TOKEN
 
       - name: Pull Vercel config
+        working-directory: ${{ inputs.working-directory }}
         run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
 
       - name: Build
+        working-directory: ${{ inputs.working-directory }}
         run: vercel build --prod --token=$VERCEL_TOKEN
 
       - name: Deploy
+        working-directory: ${{ inputs.working-directory }}
         run: |
           URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
           echo "Deployed to: $URL"

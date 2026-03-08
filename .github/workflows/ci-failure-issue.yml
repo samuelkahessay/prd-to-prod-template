@@ -81,6 +81,7 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEALING_PAUSED: ${{ steps.healing.outputs.paused }}
           PULL_REQUESTS_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}
+          DRILL_CANARY_FILE_PATTERN: ${{ vars.PIPELINE_DRILL_CANARY_FILE_PATTERN }}
         run: |
           set -euo pipefail
 
@@ -149,9 +150,10 @@ jobs:
                printf '%s' "$drill_id"
                return 0
              fi
-             # Customize this path to your drill canary file, or remove this fallback if your project doesn't use drill metadata
-             git log --format=%B -- <drill-canary-file-pattern> 2>/dev/null \
-               | sed -n 's/.*\[drill-id:\([^]]*\)\].*/\1/p' | head -1
+             if [ -n "${DRILL_CANARY_FILE_PATTERN:-}" ]; then
+               git log --format=%B -- "${DRILL_CANARY_FILE_PATTERN}" 2>/dev/null \
+                 | sed -n 's/.*\[drill-id:\([^]]*\)\].*/\1/p' | head -1
+             fi
            }
 
            append_drill_metadata() {

@@ -4,6 +4,7 @@ set -euo pipefail
 ISSUE_JSON=$(cat)
 
 TITLE=$(printf '%s' "$ISSUE_JSON" | jq -r '.title // ""')
+BODY=$(printf '%s' "$ISSUE_JSON" | jq -r '.body // ""')
 LABELS_JSON=$(printf '%s' "$ISSUE_JSON" | jq -c '[.labels[]?.name // empty | ascii_downcase]')
 
 has_label() {
@@ -20,6 +21,9 @@ if ! has_label "pipeline"; then
 elif [ "$TITLE" = "[Pipeline] Status" ]; then
   ACTIONABLE=false
   REASON="status_issue"
+elif printf '%s\n' "$BODY" | grep -Eq '^# PRD:'; then
+  ACTIONABLE=false
+  REASON="prd_parent_issue"
 elif has_label "report"; then
   ACTIONABLE=false
   REASON="report_issue"

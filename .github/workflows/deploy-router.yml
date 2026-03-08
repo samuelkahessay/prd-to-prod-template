@@ -48,13 +48,22 @@ jobs:
           echo "profile=${PROFILE}" >> $GITHUB_OUTPUT
           echo "Deploy profile: ${PROFILE}"
 
-  deploy-vercel:
+  deploy-vercel-nextjs:
+    needs: detect-profile
+    if: needs.detect-profile.outputs.profile == 'nextjs-vercel'
+    uses: ./.github/workflows/deploy-vercel.yml
+    with:
+      working-directory: studio
+    secrets: inherit
+
+  deploy-vercel-node:
     needs: detect-profile
     if: >-
-      needs.detect-profile.outputs.profile == 'nextjs-vercel' ||
       needs.detect-profile.outputs.profile == 'express-vercel' ||
       needs.detect-profile.outputs.profile == 'node-vercel'
     uses: ./.github/workflows/deploy-vercel.yml
+    with:
+      working-directory: .
     secrets: inherit
 
   # ─── Extensibility: Add new deployment targets below ───

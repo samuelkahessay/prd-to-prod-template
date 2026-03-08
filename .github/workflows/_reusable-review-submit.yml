@@ -118,7 +118,8 @@ jobs:
           inputs.pipeline_bot_login != '' &&
           (
             inputs.comment_user_login == inputs.pipeline_bot_login ||
-            inputs.comment_user_login == format('app/{0}', inputs.pipeline_bot_login)
+            inputs.comment_user_login == format('app/{0}', inputs.pipeline_bot_login) ||
+            inputs.comment_user_login == format('{0}[bot]', inputs.pipeline_bot_login)
           )
         ) ||
         (inputs.repository_owner != '' && inputs.comment_user_login == inputs.repository_owner) ||
@@ -246,7 +247,8 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
             -f event="${VERDICT}" \
-            -f body="${REVIEW_BODY}"
+            -f body="${REVIEW_BODY}" \
+            --silent >/dev/null
 
           echo "Submitted ${VERDICT} review on PR #${PR_NUMBER}"
 
@@ -724,7 +726,8 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
             -f event="${VERDICT}" \
-            -f body="${REVIEW_BODY}"
+            -f body="${REVIEW_BODY}" \
+            --silent >/dev/null
 
           echo "Submitted ${VERDICT} review on PR #${PR_NUMBER}"
 

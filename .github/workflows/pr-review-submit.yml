@@ -71,7 +71,8 @@ jobs:
           vars.PIPELINE_BOT_LOGIN != '' &&
           (
             github.event.comment.user.login == vars.PIPELINE_BOT_LOGIN ||
-            github.event.comment.user.login == format('app/{0}', vars.PIPELINE_BOT_LOGIN)
+            github.event.comment.user.login == format('app/{0}', vars.PIPELINE_BOT_LOGIN) ||
+            github.event.comment.user.login == format('{0}[bot]', vars.PIPELINE_BOT_LOGIN)
           )
         )
       )
@@ -192,7 +193,8 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
             -f event="${VERDICT}" \
-            -f body="${REVIEW_BODY}"
+            -f body="${REVIEW_BODY}" \
+            --silent >/dev/null
 
           echo "Submitted ${VERDICT} review on PR #${PR_NUMBER}"
 
@@ -665,7 +667,8 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
             -f event="${VERDICT}" \
-            -f body="${REVIEW_BODY}"
+            -f body="${REVIEW_BODY}" \
+            --silent >/dev/null
 
           echo "Submitted ${VERDICT} review on PR #${PR_NUMBER}"
 
