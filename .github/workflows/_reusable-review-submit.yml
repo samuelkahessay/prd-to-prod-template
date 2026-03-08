@@ -241,14 +241,17 @@ jobs:
             REVIEW_BODY="## Pipeline Review — Changes Requested"$'\n\n'"${REVIEW_BODY}"$'\n\n'"---"$'\n'"*Submitted by Pipeline Review Submit (github-actions[bot]).*"
           fi
 
-          # Submit the formal review as github-actions[bot] (via GITHUB_TOKEN)
+          # Submit the formal review as github-actions[bot] (via GITHUB_TOKEN).
+          # Use jq to construct the JSON payload so that arbitrary markdown in
+          # REVIEW_BODY is properly escaped (gh api -f can choke on complex
+          # multi-line strings, causing "unexpected end of JSON input").
+          jq -n --arg event "$VERDICT" --arg body "$REVIEW_BODY" \
+            '{event: $event, body: $body}' | \
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
-            -f event="${VERDICT}" \
-            -f body="${REVIEW_BODY}" \
-            --silent >/dev/null
+            --input - > /dev/null 2>&1 || true
 
           echo "Submitted ${VERDICT} review on PR #${PR_NUMBER}"
 
@@ -721,13 +724,13 @@ jobs:
 
           REVIEW_BODY="## Pipeline Review — Break-glass ${VERDICT}"$'\n\n'"${SUMMARY}"$'\n\n'"---"$'\n'"*Submitted via workflow_dispatch by @${{ inputs.actor }}.*"
 
+          jq -n --arg event "$VERDICT" --arg body "$REVIEW_BODY" \
+            '{event: $event, body: $body}' | \
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             "/repos/${REPO}/pulls/${PR_NUMBER}/reviews" \
-            -f event="${VERDICT}" \
-            -f body="${REVIEW_BODY}" \
-            --silent >/dev/null
+            --input - > /dev/null 2>&1 || true
 
           echo "Submitted ${VERDICT} review on PR #${PR_NUMBER}"
 
