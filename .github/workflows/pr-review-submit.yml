@@ -809,6 +809,7 @@ jobs:
       - name: Require pipeline App token for autonomous merge
         if: always() && github.event.inputs.verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PIPELINE_APP_ID: ${{ vars.PIPELINE_APP_ID }}
           PIPELINE_APP_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.inputs.pr_number }}
@@ -831,6 +832,7 @@ jobs:
       - name: Enable auto-merge (APPROVE only)
         if: always() && github.event.inputs.verdict == 'APPROVE' && steps.healing.outputs.enabled == 'true' && steps.policy.outputs.auto_merge_allowed == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.inputs.pr_number }}
           REPO: ${{ github.repository }}
