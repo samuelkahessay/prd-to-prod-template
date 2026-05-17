@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
+
+echo "=== Agentic Pipeline Bootstrap ==="
+
+# Check prerequisites
+command -v gh >/dev/null 2>&1 || { echo "ERROR: GitHub CLI (gh) not installed"; exit 1; }
+gh aw version >/dev/null 2>&1 || { echo "ERROR: gh-aw not installed. Run: gh extension install github/gh-aw"; exit 1; }
+
+# Create labels
+echo "Creating labels..."
+for label in "pipeline:0075ca:Pipeline-managed issue" \
+             "feature:a2eeef:New feature" \
+             "test:7057ff:Test coverage" \
+             "infra:fbca04:Infrastructure" \
+             "docs:0075ca:Documentation" \
+             "bug:d73a4a:Bug fix" \
+             "automation:e4e669:Created by automation" \
+             "in-progress:d93f0b:Work in progress" \
+             "blocked:b60205:Blocked by dependency" \
+             "ready:0e8a16:Ready for implementation" \
+             "architecture-draft:7057ff:Architecture plan awaiting human review" \
+             "architecture-approved:0e8a16:Architecture plan approved for decomposition" \
+             "completed:0e8a16:Completed and merged" \
+             "report:c5def5:Status report" \
+             "bug-intake:e4e669:Filed via bug-report template" \
+             "agentic-workflows:ededed:Agentic workflow failure notification" \
+             "ci-failure:C24E3F:Tracks active CI repair incidents on pull requests" \
+             "ci-auth:B60205:CI failure requires human credentials or secret repair" \
+             "ci-rate-limit:FBCA04:CI failure appears transient due to provider rate limits" \
+             "ci-timeout:D4C5F9:CI failure appears transient due to job timeout" \
+             "ci-infrastructure:5319E7:CI failure appears transient due to infrastructure instability" \
+             "needs-human:B60205:Requires human intervention rather than automated repair" \
+             "repair-in-progress:D97706:Automated CI repair has been dispatched or is actively retrying" \
+             "repair-escalated:B60205:Automated CI repair exhausted retries and needs human attention"; do
+  IFS=: read -r name color desc <<< "$label"
+  gh label create "$name" --color "$color" --description "$desc" --force 2>/dev/null || true
+done
+echo "Labels created."
+
+# Compile workflows
+echo "Compiling gh-aw workflows..."
+gh aw compile
+echo "Workflows compiled."
+
+# Seed repo-memory branch (prevents first-run artifact error)
+echo "Seeding repo-memory branch..."
+if ! git ls-remote --heads origin memory/repo-assist | grep -q memory/repo-assist; then
+  TEMP_DIR=$(mktemp -d)
+  echo '{"initialized": true, "note": "Seeded by bootstrap.sh"}' > "$TEMP_DIR/state.json"
+  cd "$TEMP_DIR"
+  git init -q && git checkout -q --orphan memory/repo-assist
+  git add state.json && git commit -q -m "Seed repo memory"
+  git remote add origin "$(gh repo view --json url -q .url).git"
+  git push -q origin memory/repo-assist
+  cd - > /dev/null
+  rm -rf "$TEMP_DIR"
+  echo "Repo-memory branch created."
+else
+  echo "Repo-memory branch already exists, validating..."
+  # Validate: memory branch should only contain lightweight state files.
+  # If template files leaked onto it (e.g. setup.sh, CLAUDE.md), the
+  # push_repo_memory step will fail validation on every agent run.
+  REPO_NWO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+  BAD_FILES=$(gh api "repos/${REPO_NWO}/git/trees/memory/repo-assist?recursive=1" \
+    --jq '[.tree[] | select(.type == "blob" and .size > 10240)] | length' 2>/dev/null || echo "0")
+  if [ "$BAD_FILES" -gt 0 ]; then
+    echo "WARNING: memory/repo-assist has $BAD_FILES file(s) over 10KB."
+    echo "         These will block push_repo_memory unless max-file-size is raised in workflow frontmatter."
+    echo "         To fix: delete oversized files from the branch, or delete and re-seed the branch."
+  else
+    echo "Repo-memory branch is clean."
+  fi
+fi
+
+# Configure repo settings for pipeline
+echo "Configuring repo settings..."
+gh api repos/{owner}/{repo} --method PATCH \
+  -f allow_auto_merge=true \
+  -f squash_merge_commit_message="PR_BODY" \
+  -f squash_merge_commit_title="PR_TITLE" \
+  --silent 2>/dev/null || true
+echo "Squash merge set to use PR body (preserves Closes #N)."
+echo "Auto-merge enabled."
+
+PIPELINE_BOT_LOGIN_VALUE="${PIPELINE_BOT_LOGIN:-prd-to-prod-pipeline}"
+gh variable set PIPELINE_BOT_LOGIN --body "$PIPELINE_BOT_LOGIN_VALUE" >/dev/null 2>&1 || true
+echo "PIPELINE_BOT_LOGIN set to ${PIPELINE_BOT_LOGIN_VALUE}."
+
+if gh variable list --json name -q '.[].name' 2>/dev/null | grep -qx "PIPELINE_ENABLED"; then
+  PIPELINE_ENABLED_VALUE=$(gh variable list --json name,value -q '.[] | select(.name == "PIPELINE_ENABLED") | .value' 2>/dev/null || echo "")
+  echo "PIPELINE_ENABLED already set to ${PIPELINE_ENABLED_VALUE:-<empty>}."
+else
+  gh variable set PIPELINE_ENABLED --body "false" >/dev/null 2>&1 || true
+  echo "PIPELINE_ENABLED initialized to false. Run setup verification before activating scheduled agents."
+fi
+
+if gh secret list --json name -q '.[].name' 2>/dev/null | grep -qx "COPILOT_GITHUB_TOKEN"; then
+  echo "COPILOT_GITHUB_TOKEN secret detected."
+else
+  echo "WARNING: COPILOT_GITHUB_TOKEN is not set. Manual agent runs will fail until configured."
+fi
+
+# Configure secrets reminder
+echo ""
+echo "=== Setup Complete ==="
+echo ""
+echo "Next steps:"
+echo "1. Configure the Copilot engine secret:"
+echo "   gh secret set COPILOT_GITHUB_TOKEN"
+echo "2. Verify required repo settings:"
+echo "   - 'Protect main' ruleset exists and is active"
+echo "   - Ruleset requires 1 approving review"
+echo "   - Ruleset requires the 'review' status check"
+echo "   - Ruleset allows squash-only merges"
+echo "   - Admin bypass remains enabled"
+echo "3. Run: ./setup-verify.sh"
+echo "4. Activate scheduled agents after verification:"
+echo "   gh variable set PIPELINE_ENABLED --body true"
+echo "5. Push changes: git push"
+echo "6. Test the pipeline:"
+echo "   - Create an issue with a PRD, then comment /decompose"
+echo "   - Or run: gh aw run prd-decomposer"

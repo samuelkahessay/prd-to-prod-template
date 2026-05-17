@@ -1,0 +1,80 @@
+#
+# Deploy Router — Reads the active deploy profile and dispatches to the
+# appropriate deployment workflow on every push to main.
+#
+# The .deploy-profile file in the repo root contains the active profile name.
+# The current product lane uses `nextjs-vercel`.
+#
+# Safety:
+#   - Concurrency group ensures only one deploy runs at a time
+#   - Fails loudly if .deploy-profile is missing or unrecognized
+#
+
+name: Deploy Router
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write       # needed for validate-deployment
+  pull-requests: read # needed for validate-deployment
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  detect-profile:
+    runs-on: ubuntu-latest
+    outputs:
+      profile: ${{ steps.read.outputs.profile }}
+      issue_numbers: ${{ steps.read.outputs.issue_numbers }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .deploy-profile
+            scripts/extract-linked-issue-numbers.sh
+          sparse-checkout-cone-mode: false
+
+      - id: read
+        env:
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ ! -f .deploy-profile ]; then
+            echo "::error::No .deploy-profile found in repo root. Create one with the profile name (e.g., 'nextjs-vercel')."
+            exit 1
+          fi
+          PROFILE=$(cat .deploy-profile | tr -d '[:space:]')
+          if [ -z "$PROFILE" ]; then
+            echo "::error::.deploy-profile is empty."
+            exit 1
+          fi
+          ISSUE_NUMBERS=$(printf '%s' "$HEAD_COMMIT_MESSAGE" | bash scripts/extract-linked-issue-numbers.sh "$REPO" | paste -sd, -)
+          echo "profile=${PROFILE}" >> $GITHUB_OUTPUT
+          echo "issue_numbers=${ISSUE_NUMBERS}" >> $GITHUB_OUTPUT
+          echo "Deploy profile: ${PROFILE}"
+
+  deploy-vercel:
+    needs: detect-profile
+    if: needs.detect-profile.outputs.profile == 'nextjs-vercel'
+    uses: ./.github/workflows/deploy-vercel.yml
+    secrets: inherit
+
+  validate-deployment:
+    needs: [detect-profile, deploy-vercel]
+    if: |
+      always() &&
+      needs.detect-profile.outputs.issue_numbers != '' &&
+      needs.deploy-vercel.result == 'success'
+    uses: ./.github/workflows/validate-deployment.yml
+    with:
+      profile: ${{ needs.detect-profile.outputs.profile }}
+      issue_numbers: ${{ needs.detect-profile.outputs.issue_numbers }}
+    secrets: inherit

@@ -1,0 +1,63 @@
+.DS_Store
+*.swp
+*.swo
+*~
+*.log
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+.claude/
+node_modules/
+console/data/*
+!console/data/.gitkeep
+dist/
+.next/
+.github/aw/
+.vscode/
+.vercel/
+aw-prompts/
+aw_info.json
+mcp-logs/
+*.patch
+.vercel
+docs/internal/
+# .NET
+bin/
+obj/
+*.user
+.vs/
+.azure/
+CLAUDE.md
+
+# Drill reports (committed as evidence)
+# drills/reports/*.json
+
+# Demo video working files
+scripts/demo-video/
+
+# Scratch screenshots
+pipeline-replay-screenshot.png
+landing-page-*.png
+pipeline-page-*.png
+openmatter-*.png
+factory-hero.png
+linkedin-posts-full.png
+
+# Tool artifacts
+.playwright-cli/
+output/
+generated-prd.md
+
+# Generated course
+prd-to-prod-course.html
+
+# Local tool state
+.playwright-mcp/
+.sisyphus/
+.superpowers/
+.worktrees/
+
+# Local playbook drafts
+docs/playbook/

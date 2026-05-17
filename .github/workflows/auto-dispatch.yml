@@ -1,0 +1,235 @@
+name: Auto-Dispatch Pipeline Issues
+
+on:
+  issues:
+    types: [opened, reopened, labeled]
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+# Collapse rapid issue creation (e.g., decomposer burst) to one dispatch.
+concurrency:
+  group: auto-dispatch-pipeline-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  dispatch:
+    # Security model: external reporters cannot self-assign labels on free-form
+    # issues, but GitHub issue forms apply labels server-side. The `pipeline`
+    # label is therefore the trusted ingress gate. Actionability is decided
+    # inside the workflow via classify-pipeline-issue.sh.
+    if: |
+      vars.PIPELINE_ACTIVE != 'false' &&
+      !startsWith(github.event.issue.title, '[CI Incident]') &&
+      github.event.issue.title != '[Pipeline] Status' &&
+      !contains(github.event.issue.labels.*.name, 'report') &&
+      contains(github.event.issue.labels.*.name, 'pipeline')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PIPELINE_HEALING_ENABLED: ${{ vars.PIPELINE_HEALING_ENABLED }}
+    steps:
+      - name: Checkout workflow helpers
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/healing-control.sh
+            scripts/classify-pipeline-issue.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Check healing pause switch
+        id: healing
+        run: |
+          if scripts/healing-control.sh is-enabled; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=healing_paused" >> "$GITHUB_OUTPUT"
+            echo "Autonomous healing is paused via PIPELINE_HEALING_ENABLED."
+          fi
+
+      - name: Classify pipeline issue
+        if: steps.healing.outputs.skip != 'true'
+        id: classify
+        env:
+          ISSUE_JSON: ${{ toJson(github.event.issue) }}
+        run: |
+          CLASSIFICATION=$(printf '%s' "$ISSUE_JSON" | scripts/classify-pipeline-issue.sh)
+          ACTIONABLE=$(printf '%s' "$CLASSIFICATION" | jq -r '.actionable')
+          REASON=$(printf '%s' "$CLASSIFICATION" | jq -r '.reason')
+          ROUTE=$(printf '%s' "$CLASSIFICATION" | jq -r '.route')
+          WORKFLOW_FILE=$(printf '%s' "$CLASSIFICATION" | jq -r '.workflow_file')
+          AGENT_COMMAND=$(printf '%s' "$CLASSIFICATION" | jq -r '.agent_command')
+          BACKOFF_SECONDS=$(printf '%s' "$CLASSIFICATION" | jq -r '.backoff_seconds')
+          echo "actionable=${ACTIONABLE}" >> "$GITHUB_OUTPUT"
+          echo "reason=${REASON}" >> "$GITHUB_OUTPUT"
+          echo "route=${ROUTE}" >> "$GITHUB_OUTPUT"
+          echo "workflow_file=${WORKFLOW_FILE}" >> "$GITHUB_OUTPUT"
+          echo "agent_command=${AGENT_COMMAND}" >> "$GITHUB_OUTPUT"
+          echo "backoff_seconds=${BACKOFF_SECONDS}" >> "$GITHUB_OUTPUT"
+          echo "Issue classification: actionable=${ACTIONABLE} reason=${REASON} route=${ROUTE} workflow_file=${WORKFLOW_FILE} backoff_seconds=${BACKOFF_SECONDS}"
+
+      - name: Route needs-human issue
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.route == 'needs_human'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          LABELS=$(gh label list --repo "$REPO" --limit 200 --json name --jq '.[].name')
+          if printf '%s\n' "$LABELS" | grep -qx "needs-human"; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "needs-human" >/dev/null 2>&1 || \
+              echo "::warning::Could not add needs-human label to issue #${ISSUE_NUMBER}"
+          fi
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" \
+            --body "Auto-dispatch routed this pipeline issue to \`needs-human\` because it carries a non-fixable CI auth/escalation label." >/dev/null || \
+            echo "::warning::Could not record needs-human routing comment on issue #${ISSUE_NUMBER}"
+
+      - name: Skip non-actionable issue
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable != 'true'
+        run: |
+          echo "Issue is in the pipeline lane but is not actionable: ${{ steps.classify.outputs.reason }}"
+
+      - name: Debounce (let issue burst settle)
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true'
+        run: sleep 15
+
+      - name: Apply retry backoff
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true' && steps.classify.outputs.route == 'retry_with_backoff'
+        run: |
+          echo "Retryable CI issue detected; backing off for ${{ steps.classify.outputs.backoff_seconds }}s before dispatch."
+          sleep "${{ steps.classify.outputs.backoff_seconds }}"
+
+      - name: Skip when owning agent already active
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true'
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          WORKFLOW_FILE: ${{ steps.classify.outputs.workflow_file }}
+        run: |
+          ACTIVE_RUNS=$(gh run list --repo "$REPO" \
+            --workflow "$WORKFLOW_FILE" \
+            --limit 20 \
+            --json databaseId,status,event,url,createdAt \
+            | jq '[.[] | select((.status == "in_progress" or .status == "queued") and .event == "workflow_dispatch")] | sort_by(.createdAt)')
+          ACTIVE_COUNT=$(printf '%s' "$ACTIVE_RUNS" | jq 'length')
+          BLOCKING_RUN_ID=$(printf '%s' "$ACTIVE_RUNS" | jq -r '.[0].databaseId // ""')
+          BLOCKING_RUN_URL=$(printf '%s' "$ACTIVE_RUNS" | jq -r '.[0].url // ""')
+          echo "blocking_run_id=${BLOCKING_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "blocking_run_url=${BLOCKING_RUN_URL}" >> "$GITHUB_OUTPUT"
+          if [ "$ACTIVE_COUNT" -gt 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "${WORKFLOW_FILE} already queued/running; skipping dispatch."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record deferred dispatch marker
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true' && steps.guard.outputs.skip == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DISPATCH_WORKFLOW_RUN_ID: ${{ github.run_id }}
+          ROUTE: ${{ steps.classify.outputs.route }}
+          WORKFLOW_FILE: ${{ steps.classify.outputs.workflow_file }}
+          BLOCKING_RUN_ID: ${{ steps.guard.outputs.blocking_run_id }}
+          BLOCKING_RUN_URL: ${{ steps.guard.outputs.blocking_run_url }}
+        run: |
+          DEFERRED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          BODY=$(printf '%s\n' \
+            '<!-- self-healing-dispatch-deferred:v1' \
+            'dispatch_workflow=Auto-Dispatch Pipeline Issues' \
+            "dispatch_workflow_run_id=${DISPATCH_WORKFLOW_RUN_ID}" \
+            "dispatch_workflow_run_url=https://github.com/${REPO}/actions/runs/${DISPATCH_WORKFLOW_RUN_ID}" \
+            "route=${ROUTE}" \
+            "workflow_file=${WORKFLOW_FILE}" \
+            "blocking_repo_assist_run_id=${BLOCKING_RUN_ID}" \
+            "blocking_repo_assist_run_url=${BLOCKING_RUN_URL}" \
+            "blocking_agent_run_id=${BLOCKING_RUN_ID}" \
+            "blocking_agent_run_url=${BLOCKING_RUN_URL}" \
+            "deferred_at=${DEFERRED_AT}" \
+            '-->' \
+            '' \
+            "Self-healing audit marker: dispatch deferred while ${WORKFLOW_FILE} was already active.")
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$BODY" >/dev/null || \
+            echo "::warning::Could not record deferred dispatch marker on issue #${ISSUE_NUMBER}"
+
+      - name: Dispatch owning agent
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true' && steps.guard.outputs.skip != 'true'
+        id: dispatch_agent
+        env:
+          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          WORKFLOW_FILE: ${{ steps.classify.outputs.workflow_file }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          DISPATCHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          if [ "$WORKFLOW_FILE" = "repo-assist.lock.yml" ]; then
+            gh workflow run "$WORKFLOW_FILE" \
+              --repo "$REPO" \
+              -f issue_number="$ISSUE_NUMBER"
+          else
+            gh workflow run "$WORKFLOW_FILE" \
+              --repo "$REPO"
+          fi
+
+          AGENT_RUN_ID=""
+          AGENT_RUN_URL=""
+          for attempt in $(seq 1 12); do
+            RUN_JSON=$(gh run list --repo "$REPO" \
+              --workflow "$WORKFLOW_FILE" \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,createdAt,url \
+              | jq --arg dispatched_at "$DISPATCHED_AT" '[.[] | select(.createdAt >= $dispatched_at)] | sort_by(.createdAt) | last // {}')
+            AGENT_RUN_ID=$(printf '%s' "$RUN_JSON" | jq -r '.databaseId // ""')
+            AGENT_RUN_URL=$(printf '%s' "$RUN_JSON" | jq -r '.url // ""')
+            if [ -n "$AGENT_RUN_ID" ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          echo "dispatched_at=${DISPATCHED_AT}" >> "$GITHUB_OUTPUT"
+          echo "agent_run_id=${AGENT_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "agent_run_url=${AGENT_RUN_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Record dispatch marker
+        if: steps.healing.outputs.skip != 'true' && steps.classify.outputs.actionable == 'true' && steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DISPATCH_WORKFLOW_RUN_ID: ${{ github.run_id }}
+          ROUTE: ${{ steps.classify.outputs.route }}
+          WORKFLOW_FILE: ${{ steps.classify.outputs.workflow_file }}
+          AGENT_RUN_ID: ${{ steps.dispatch_agent.outputs.agent_run_id }}
+          AGENT_RUN_URL: ${{ steps.dispatch_agent.outputs.agent_run_url }}
+          DISPATCHED_AT: ${{ steps.dispatch_agent.outputs.dispatched_at }}
+        run: |
+          BODY=$(printf '%s\n' \
+            '<!-- self-healing-dispatch:v1' \
+            'dispatch_workflow=Auto-Dispatch Pipeline Issues' \
+            "dispatch_workflow_run_id=${DISPATCH_WORKFLOW_RUN_ID}" \
+            "dispatch_workflow_run_url=https://github.com/${REPO}/actions/runs/${DISPATCH_WORKFLOW_RUN_ID}" \
+            "route=${ROUTE}" \
+            "workflow_file=${WORKFLOW_FILE}" \
+            "repo_assist_run_id=${AGENT_RUN_ID}" \
+            "repo_assist_run_url=${AGENT_RUN_URL}" \
+            "agent_run_id=${AGENT_RUN_ID}" \
+            "agent_run_url=${AGENT_RUN_URL}" \
+            "dispatched_at=${DISPATCHED_AT}" \
+            '-->' \
+            '' \
+            "Self-healing audit marker: ${WORKFLOW_FILE} dispatched.")
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$BODY" >/dev/null || \
+            echo "::warning::Could not record dispatch marker on issue #${ISSUE_NUMBER}"

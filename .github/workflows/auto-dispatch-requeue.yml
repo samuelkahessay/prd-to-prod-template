@@ -1,0 +1,425 @@
+name: Auto-Dispatch Requeue
+
+on:
+  workflow_run:
+    workflows: ["Pipeline Repo Assist", "Frontend Agent"]
+    types: [completed]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+concurrency:
+  group: auto-dispatch-requeue
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  requeue:
+    # Skip runs where repo-assist had no activation (skipped) or was cancelled mid-run.
+    # These are caused by [aw] Noop issues or other events with no /repo-assist command,
+    # and there is nothing to requeue in those cases.
+    if: |
+      vars.PIPELINE_ACTIVE != 'false' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion != 'skipped' &&
+       github.event.workflow_run.conclusion != 'cancelled'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PIPELINE_HEALING_ENABLED: ${{ vars.PIPELINE_HEALING_ENABLED }}
+    steps:
+      - name: Checkout repository helpers
+        uses: actions/checkout@v4
+
+      - name: Check healing pause switch
+        id: healing
+        run: |
+          if scripts/healing-control.sh is-enabled; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "skip_reason=healing_paused" >> "$GITHUB_OUTPUT"
+            echo "Autonomous healing is paused via PIPELINE_HEALING_ENABLED."
+          fi
+
+      - name: Retry transient provider failure for the same issue
+        if: |
+          steps.healing.outputs.skip != 'true' &&
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.name == 'Pipeline Repo Assist' &&
+          (github.event.workflow_run.conclusion == 'failure' ||
+           github.event.workflow_run.conclusion == 'timed_out')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+        run: |
+          set -euo pipefail
+
+          DISPATCH_MARKER='<!-- self-healing-dispatch:v1'
+          RETRY_MARKER='<!-- provider-retry:v1'
+          WORKFLOW_FILE='repo-assist.lock.yml'
+          MAX_RETRIES=2
+
+          read_marker_field() {
+            local body=$1
+            local field=$2
+            printf '%s\n' "$body" | sed -n "s/^${field}=//p" | head -1
+          }
+
+          find_marker_comments() {
+            local issue_number=$1
+            local marker=$2
+            gh api "/repos/${REPO}/issues/${issue_number}/comments?per_page=100" 2>/dev/null \
+              | jq -c --arg marker "$marker" '[.[] | select(.body | contains($marker))]' || echo '[]'
+          }
+
+          if [ -z "${GH_AW_GITHUB_TOKEN:-}" ]; then
+            echo "::warning::GH_AW_GITHUB_TOKEN is unavailable; cannot retry transient provider failures."
+            exit 0
+          fi
+
+          LOGS=$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null || gh run view "$RUN_ID" --repo "$REPO" --log 2>/dev/null || true)
+          LOGS_LOWER=$(printf '%s' "$LOGS" | tr '[:upper:]' '[:lower:]')
+          if ! printf '%s' "$LOGS_LOWER" | grep -Eq 'request failed due to a transient api error|timed out after 60 minutes|streamable http error: session not found|rate limit|429|service unavailable'; then
+            echo "Run ${RUN_ID} does not match the transient provider failure signature."
+            exit 0
+          fi
+
+          OPEN_PRS=$(gh pr list --repo "$REPO" --state open --limit 100 --json body 2>/dev/null || echo '[]')
+          LINKED_ISSUES=$(printf '%s' "$OPEN_PRS" | jq -r '.[].body // empty' 2>/dev/null \
+            | bash scripts/extract-linked-issue-numbers.sh "$REPO" || true)
+          PIPELINE_ISSUES=$(gh issue list --repo "$REPO" --label pipeline --state open --limit 200 --json number 2>/dev/null || echo '[]')
+
+          ISSUE_NUMBER=""
+          while IFS= read -r ISSUE_ROW; do
+            [ -z "$ISSUE_ROW" ] && continue
+            CANDIDATE=$(printf '%s' "$ISSUE_ROW" | jq -r '.number')
+            COMMENTS_JSON=$(find_marker_comments "$CANDIDATE" "$DISPATCH_MARKER")
+            MATCH_COUNT=$(printf '%s' "$COMMENTS_JSON" | jq --arg run_id "$RUN_ID" '[.[] | select((.body | contains("agent_run_id=" + $run_id)) or (.body | contains("repo_assist_run_id=" + $run_id)))] | length')
+            if [ "${MATCH_COUNT:-0}" -gt 0 ]; then
+              ISSUE_NUMBER="$CANDIDATE"
+              break
+            fi
+          done < <(printf '%s' "$PIPELINE_ISSUES" | jq -c '.[]')
+
+          if [ -z "$ISSUE_NUMBER" ]; then
+            echo "No open pipeline issue is linked to failed run ${RUN_ID}."
+            exit 0
+          fi
+
+          if printf '%s\n' "$LINKED_ISSUES" | grep -q "^${ISSUE_NUMBER}$"; then
+            echo "Issue #${ISSUE_NUMBER} already has an open linked PR; skip automatic re-dispatch."
+            exit 0
+          fi
+
+          RETRY_COMMENTS=$(find_marker_comments "$ISSUE_NUMBER" "$RETRY_MARKER")
+          ALREADY_RETRIED=$(printf '%s' "$RETRY_COMMENTS" | jq --arg run_id "$RUN_ID" '[.[] | select(.body | contains("failed_run_id=" + $run_id))] | length')
+          if [ "${ALREADY_RETRIED:-0}" -gt 0 ]; then
+            echo "Run ${RUN_ID} already triggered a retry marker on issue #${ISSUE_NUMBER}."
+            exit 0
+          fi
+
+          RETRY_COUNT=$(printf '%s' "$RETRY_COMMENTS" | jq --arg workflow_name "$WORKFLOW_NAME" '[.[] | select(.body | contains("workflow_name=" + $workflow_name))] | length')
+          if [ "${RETRY_COUNT:-0}" -ge "$MAX_RETRIES" ]; then
+            echo "Issue #${ISSUE_NUMBER} already used the transient retry budget."
+            exit 0
+          fi
+
+          DISPATCHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          GH_TOKEN="$GH_AW_GITHUB_TOKEN" gh workflow run "$WORKFLOW_FILE" \
+            --repo "$REPO" \
+            -f issue_number="$ISSUE_NUMBER"
+
+          AGENT_RUN_ID=""
+          AGENT_RUN_URL=""
+          for attempt in $(seq 1 12); do
+            RUN_JSON=$(gh run list --repo "$REPO" \
+              --workflow "$WORKFLOW_FILE" \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,createdAt,url \
+              | jq --arg dispatched_at "$DISPATCHED_AT" '[.[] | select(.createdAt >= $dispatched_at)] | sort_by(.createdAt) | last // {}')
+            AGENT_RUN_ID=$(printf '%s' "$RUN_JSON" | jq -r '.databaseId // ""')
+            AGENT_RUN_URL=$(printf '%s' "$RUN_JSON" | jq -r '.url // ""')
+            if [ -n "$AGENT_RUN_ID" ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          RETRY_NUMBER=$((RETRY_COUNT + 1))
+          BODY=$(printf '%s\n' \
+            '<!-- provider-retry:v1' \
+            'dispatch_origin_workflow=Auto-Dispatch Requeue' \
+            "workflow_name=${WORKFLOW_NAME}" \
+            "workflow_file=${WORKFLOW_FILE}" \
+            "failed_run_id=${RUN_ID}" \
+            "failed_run_url=${RUN_URL}" \
+            "retry_number=${RETRY_NUMBER}" \
+            "agent_run_id=${AGENT_RUN_ID}" \
+            "agent_run_url=${AGENT_RUN_URL}" \
+            "dispatched_at=${DISPATCHED_AT}" \
+            '-->' \
+            '' \
+            "Auto-retrying issue #${ISSUE_NUMBER} after a transient provider failure in ${WORKFLOW_NAME}.")
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$BODY" >/dev/null || \
+            echo "::warning::Could not record transient retry marker on issue #${ISSUE_NUMBER}"
+
+      - name: Re-dispatch deferred actionable issue
+        if: steps.healing.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_AW_GITHUB_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          DEFERRED_MARKER='<!-- self-healing-dispatch-deferred:v1'
+          DISPATCH_MARKER='<!-- self-healing-dispatch:v1'
+          OUTCOME_MARKER='<!-- self-healing-dispatch-outcome:v1'
+          MAX_STALE_REDISPATCHES=3
+
+          read_marker_field() {
+            local body=$1
+            local field=$2
+            printf '%s\n' "$body" | sed -n "s/^${field}=//p" | head -1
+          }
+
+          find_marker_comments() {
+            local issue_number=$1
+            local marker=$2
+            local comments_json
+            comments_json=$(gh api "/repos/${REPO}/issues/${issue_number}/comments?per_page=100" 2>/dev/null || echo '[]')
+            printf '%s' "$comments_json" | jq -c --arg marker "$marker" '[.[] | select(.body | contains($marker))]'
+          }
+
+          find_marker_comment() {
+            local issue_number=$1
+            local marker=$2
+            printf '%s' "$(find_marker_comments "$issue_number" "$marker")" | jq -c 'last // {}'
+          }
+
+          find_matching_outcome_comment() {
+            local issue_number=$1
+            local agent_run_id=$2
+            printf '%s' "$(find_marker_comments "$issue_number" "$OUTCOME_MARKER")" | jq -c --arg run_id "$agent_run_id" '
+              [.[] | select(
+                ($run_id == "") or
+                ((.body | contains("agent_run_id=" + $run_id)) or (.body | contains("repo_assist_run_id=" + $run_id)))
+              )] | last // {}'
+          }
+
+          dispatch_count_after() {
+            local comments_json=$1
+            local threshold=$2
+            printf '%s' "$comments_json" | jq --arg threshold "$threshold" '
+              [ .[]
+                | . as $comment
+                | ((try (.body | capture("(?m)^dispatched_at=(?<value>[^\\n]+)") | .value) catch "") // "") as $marker_time
+                | (($marker_time | select(. != "")) // ($comment.created_at // "")) as $effective_time
+                | select($effective_time != "" and $effective_time >= $threshold)
+              ] | length'
+          }
+
+          run_state_json() {
+            local run_id=$1
+            if [ -z "$run_id" ]; then
+              echo '{}'
+              return
+            fi
+            gh run view "$run_id" --repo "$REPO" --json status,conclusion 2>/dev/null || echo '{}'
+          }
+
+          to_epoch() {
+            local iso_value=$1
+            date -u -d "$iso_value" +%s 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso_value" +%s 2>/dev/null || echo 0
+          }
+
+          workflow_active_count() {
+            local workflow_file=$1
+            gh run list --repo "$REPO" \
+              --workflow "$workflow_file" \
+              --limit 20 \
+              --json databaseId,status \
+              | jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length'
+          }
+
+          if [ -z "${GH_AW_GITHUB_TOKEN:-}" ]; then
+            echo "::warning::GH_AW_GITHUB_TOKEN is unavailable; cannot re-dispatch via workflow_dispatch."
+            exit 0
+          fi
+
+          OPEN_PRS=$(gh pr list --repo "$REPO" --state open --limit 100 --json body 2>/dev/null || echo '[]')
+          LINKED_ISSUES=$(printf '%s' "$OPEN_PRS" | jq -r '.[].body // empty' 2>/dev/null \
+            | bash scripts/extract-linked-issue-numbers.sh "$REPO" || true)
+          PIPELINE_ISSUES=$(gh issue list --repo "$REPO" --label pipeline --state open --limit 200 \
+            --json number,title,createdAt,labels 2>/dev/null || echo '[]')
+
+          SELECTED_ISSUE=""
+          SELECTED_WORKFLOW=""
+          SELECTED_ROUTE=""
+
+          while IFS= read -r ISSUE_ROW; do
+            [ -z "$ISSUE_ROW" ] && continue
+            ISSUE_NUM=$(printf '%s' "$ISSUE_ROW" | jq -r '.number')
+
+            ISSUE_CLASSIFICATION=$(printf '%s' "$ISSUE_ROW" | scripts/classify-pipeline-issue.sh)
+            ISSUE_ACTIONABLE=$(printf '%s' "$ISSUE_CLASSIFICATION" | jq -r '.actionable')
+            ISSUE_WORKFLOW=$(printf '%s' "$ISSUE_CLASSIFICATION" | jq -r '.workflow_file')
+            ISSUE_ROUTE=$(printf '%s' "$ISSUE_CLASSIFICATION" | jq -r '.route')
+            if [ "$ISSUE_ACTIONABLE" != "true" ]; then
+              ISSUE_REASON=$(printf '%s' "$ISSUE_CLASSIFICATION" | jq -r '.reason')
+              echo "Issue #${ISSUE_NUM}: skipping non-actionable issue (${ISSUE_REASON})."
+              continue
+            fi
+
+            if printf '%s\n' "$LINKED_ISSUES" | grep -q "^${ISSUE_NUM}$"; then
+              echo "Issue #${ISSUE_NUM}: already has an open linked PR."
+              continue
+            fi
+
+            DEFERRED_JSON=$(find_marker_comment "$ISSUE_NUM" "$DEFERRED_MARKER")
+            DEFERRED_ID=$(printf '%s' "$DEFERRED_JSON" | jq -r '.id // empty')
+            if [ -z "$DEFERRED_ID" ]; then
+              continue
+            fi
+
+            DEFERRED_AT=$(printf '%s' "$DEFERRED_JSON" | jq -r '.created_at // empty')
+            if [ -z "$DEFERRED_AT" ]; then
+              DEFERRED_BODY=$(printf '%s' "$DEFERRED_JSON" | jq -r '.body // ""')
+              DEFERRED_AT=$(read_marker_field "$DEFERRED_BODY" "deferred_at")
+            fi
+
+            DISPATCH_COMMENTS=$(find_marker_comments "$ISSUE_NUM" "$DISPATCH_MARKER")
+            DISPATCH_JSON=$(find_marker_comment "$ISSUE_NUM" "$DISPATCH_MARKER")
+            DISPATCH_BODY=$(printf '%s' "$DISPATCH_JSON" | jq -r '.body // ""')
+            DISPATCHED_AT=$(read_marker_field "$DISPATCH_BODY" "dispatched_at")
+            if [ -z "$DISPATCHED_AT" ]; then
+              DISPATCHED_AT=$(printf '%s' "$DISPATCH_JSON" | jq -r '.created_at // empty')
+            fi
+
+            if [ -n "$DISPATCHED_AT" ] && [ "$(to_epoch "$DISPATCHED_AT")" -ge "$(to_epoch "$DEFERRED_AT")" ]; then
+              DISPATCH_COUNT_AFTER_DEFERRED=$(dispatch_count_after "$DISPATCH_COMMENTS" "$DEFERRED_AT")
+              AGENT_RUN_ID=$(read_marker_field "$DISPATCH_BODY" "agent_run_id")
+              if [ -z "$AGENT_RUN_ID" ]; then
+                AGENT_RUN_ID=$(read_marker_field "$DISPATCH_BODY" "repo_assist_run_id")
+              fi
+
+              OUTCOME_JSON=$(find_matching_outcome_comment "$ISSUE_NUM" "$AGENT_RUN_ID")
+              OUTCOME_BODY=$(printf '%s' "$OUTCOME_JSON" | jq -r '.body // ""')
+              OUTCOME_VALUE=$(read_marker_field "$OUTCOME_BODY" "outcome")
+              OUTCOME_RECORDED_AT=$(read_marker_field "$OUTCOME_BODY" "recorded_at")
+              if [ -z "$OUTCOME_RECORDED_AT" ]; then
+                OUTCOME_RECORDED_AT=$(printf '%s' "$OUTCOME_JSON" | jq -r '.created_at // empty')
+              fi
+
+              if [ -n "$OUTCOME_VALUE" ] && { [ -z "$OUTCOME_RECORDED_AT" ] || [ "$(to_epoch "$OUTCOME_RECORDED_AT")" -ge "$(to_epoch "$DISPATCHED_AT")" ]; }; then
+                case "$OUTCOME_VALUE" in
+                  already_covered|non_actionable)
+                    echo "Issue #${ISSUE_NUM}: latest targeted dispatch reported terminal outcome '${OUTCOME_VALUE}'."
+                    continue
+                    ;;
+                  *)
+                    if [ "${DISPATCH_COUNT_AFTER_DEFERRED:-0}" -ge "$MAX_STALE_REDISPATCHES" ]; then
+                      echo "Issue #${ISSUE_NUM}: latest targeted dispatch outcome is '${OUTCOME_VALUE}', but stale re-dispatch retry cap (${MAX_STALE_REDISPATCHES}) is already exhausted."
+                      continue
+                    fi
+                    echo "Issue #${ISSUE_NUM}: latest targeted dispatch outcome is '${OUTCOME_VALUE}'; allowing bounded re-dispatch."
+                    ;;
+                esac
+              else
+                RUN_STATE=$(run_state_json "$AGENT_RUN_ID")
+                RUN_STATUS=$(printf '%s' "$RUN_STATE" | jq -r '.status // ""')
+                RUN_CONCLUSION=$(printf '%s' "$RUN_STATE" | jq -r '.conclusion // ""')
+
+                if [ "$RUN_STATUS" = "queued" ] || [ "$RUN_STATUS" = "in_progress" ]; then
+                  echo "Issue #${ISSUE_NUM}: latest dispatched run ${AGENT_RUN_ID} is still ${RUN_STATUS}."
+                  continue
+                fi
+
+                if [ "${DISPATCH_COUNT_AFTER_DEFERRED:-0}" -ge "$MAX_STALE_REDISPATCHES" ]; then
+                  echo "Issue #${ISSUE_NUM}: dispatch marker is stale, but bounded re-dispatch retry cap (${MAX_STALE_REDISPATCHES}) is exhausted."
+                  continue
+                fi
+
+                if [ -n "$AGENT_RUN_ID" ]; then
+                  echo "Issue #${ISSUE_NUM}: dispatched run ${AGENT_RUN_ID} completed (${RUN_CONCLUSION:-unknown}) without a terminal outcome marker; allowing re-dispatch."
+                else
+                  echo "Issue #${ISSUE_NUM}: dispatch marker lacks a linked agent run; allowing re-dispatch."
+                fi
+              fi
+            fi
+
+            ISSUE_ACTIVE=$(workflow_active_count "$ISSUE_WORKFLOW")
+            if [ "${ISSUE_ACTIVE:-0}" -gt 0 ]; then
+              echo "Issue #${ISSUE_NUM}: ${ISSUE_WORKFLOW} already active (${ISSUE_ACTIVE} run(s)); checking next deferred issue."
+              continue
+            fi
+
+            SELECTED_ISSUE="$ISSUE_NUM"
+            SELECTED_WORKFLOW="$ISSUE_WORKFLOW"
+            SELECTED_ROUTE="$ISSUE_ROUTE"
+            break
+          done < <(printf '%s' "$PIPELINE_ISSUES" | jq -c 'sort_by(.createdAt)[]')
+
+          if [ -z "$SELECTED_ISSUE" ]; then
+            echo "No deferred actionable issues require re-dispatch."
+            exit 0
+          fi
+
+          echo "Re-dispatching issue #${SELECTED_ISSUE} via ${SELECTED_WORKFLOW} (route: ${SELECTED_ROUTE})."
+          DISPATCHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          if [ "$SELECTED_WORKFLOW" = "repo-assist.lock.yml" ]; then
+            GH_TOKEN="$GH_AW_GITHUB_TOKEN" gh workflow run "$SELECTED_WORKFLOW" \
+              --repo "$REPO" \
+              -f issue_number="$SELECTED_ISSUE"
+          else
+            GH_TOKEN="$GH_AW_GITHUB_TOKEN" gh workflow run "$SELECTED_WORKFLOW" \
+              --repo "$REPO"
+          fi
+
+          AGENT_RUN_ID=""
+          AGENT_RUN_URL=""
+          for attempt in $(seq 1 12); do
+            RUN_JSON=$(gh run list --repo "$REPO" \
+              --workflow "$SELECTED_WORKFLOW" \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,createdAt,url \
+              | jq --arg dispatched_at "$DISPATCHED_AT" '[.[] | select(.createdAt >= $dispatched_at)] | sort_by(.createdAt) | last // {}')
+            AGENT_RUN_ID=$(printf '%s' "$RUN_JSON" | jq -r '.databaseId // ""')
+            AGENT_RUN_URL=$(printf '%s' "$RUN_JSON" | jq -r '.url // ""')
+            if [ -n "$AGENT_RUN_ID" ]; then
+              break
+            fi
+            sleep 5
+          done
+
+          MARKER_BODY=$(printf '%s\n' \
+            '<!-- self-healing-dispatch:v1' \
+            'dispatch_workflow=Auto-Dispatch Pipeline Issues' \
+            'dispatch_origin_workflow=Auto-Dispatch Requeue' \
+            'dispatch_reason=requeue_after_guard_skip' \
+            "route=${SELECTED_ROUTE}" \
+            "workflow_file=${SELECTED_WORKFLOW}" \
+            "dispatch_workflow_run_id=${GITHUB_RUN_ID}" \
+            "dispatch_workflow_run_url=https://github.com/${REPO}/actions/runs/${GITHUB_RUN_ID}" \
+            "repo_assist_run_id=${AGENT_RUN_ID}" \
+            "repo_assist_run_url=${AGENT_RUN_URL}" \
+            "agent_run_id=${AGENT_RUN_ID}" \
+            "agent_run_url=${AGENT_RUN_URL}" \
+            "dispatched_at=${DISPATCHED_AT}" \
+            '-->')
+          gh issue comment "$SELECTED_ISSUE" --repo "$REPO" --body "$MARKER_BODY" >/dev/null || \
+            echo "::warning::Could not record re-dispatch marker on issue #${SELECTED_ISSUE}"
